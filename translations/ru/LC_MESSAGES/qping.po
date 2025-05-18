@@ -1,0 +1,279 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+# This file is distributed under the same license as the PACKAGE package.
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2025-05-18 22:57+0300\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: main.py:362 main.py:728
+msgid "Ping Monitor"
+msgstr "Ping Monitor"
+
+#: main.py:380 main.py:754
+msgid "Restore"
+msgstr "Восстановить"
+
+#: main.py:382 main.py:756
+msgid "Quit"
+msgstr "Выход"
+
+#: main.py:562 main.py:741
+msgid "Help"
+msgstr "Справка"
+
+#: main.py:563 main.py:714 main.py:742
+msgid "User Guide"
+msgstr "Руководство пользователя"
+
+#: main.py:567 main.py:745
+msgid "Language"
+msgstr "Язык"
+
+#: main.py:579 main.py:729
+msgid "Enter IP/domain"
+msgstr "Добавить IP/Домен"
+
+#: main.py:582 main.py:730
+msgid "Add Host"
+msgstr "Добавить хост"
+
+#: main.py:585 main.py:731 main.py:797
+msgid "Import from File"
+msgstr "Добавить из файла"
+
+#: main.py:593 main.py:732 main.py:1070
+msgid "Interval: {}ms"
+msgstr "Скорость: {}мс"
+
+#: main.py:596 main.py:644 main.py:734
+msgid "Notifications: On"
+msgstr "Уведомления: ВКЛ"
+
+#: main.py:596 main.py:644 main.py:734
+msgid "Notifications: Off"
+msgstr "Уведомления: ВЫКЛ"
+
+#: main.py:600 main.py:652 main.py:737
+msgid "Show Failed Hosts"
+msgstr "Только недоступные хосты"
+
+#: main.py:600 main.py:652 main.py:737
+msgid "Show All Hosts"
+msgstr "Показать все хосты"
+
+#: main.py:607
+msgid "Interval:"
+msgstr "Скорость:"
+
+#: main.py:619
+msgid "Monitored Hosts:"
+msgstr "Адрес:"
+
+#: main.py:681
+msgid "<h2>Ping Monitor User Guide</h2>"
+msgstr "<h2>Краткая справка Ping Monitor</h2>"
+
+#: main.py:682
+msgid ""
+"<p>Ping Monitor is a tool for monitoring the availability of network hosts "
+"using ICMP ping or TCP port checks.</p>"
+msgstr ""
+"<p>Ping Monitor утилита проверки и мониторинга доступности серверов по ICMP "
+"или TCP порту</p>"
+
+#: main.py:683
+msgid "<h3>Getting Started</h3>"
+msgstr "Запуск"
+
+#: main.py:684
+msgid ""
+"<ul><li><b>Add a host</b>: Enter an IP address or domain in the input field "
+"and click 'Add Host' or press Enter.</li><li><b>Import hosts</b>: Use "
+"'Import from File' to add multiple hosts from a text file (one host per "
+"line).</li><li><b>Monitor hosts</b>: The application automatically starts "
+"pinging hosts once added.</li></ul>"
+msgstr ""
+"<ul><li><b>Добавить хост</b>: Введите IP-адрес или домен в поле ввода и "
+"нажмите \"Добавить хост\" или клавишу Enter.</li><li><b>Импорт хостов</b>: "
+"Используйте \"Импорт из файла\" для добавления нескольких хостов из "
+"текстового файла (по одному хосту на строку).</li><li><b>Мониторинг хостов</"
+"b>: Приложение автоматически начинает пинговать хосты после их добавления.</"
+"li></ul>"
+
+#: main.py:689
+msgid "<h3>Host Management</h3>"
+msgstr "<h3>Управление хостами</h3>"
+
+#: main.py:690
+msgid ""
+"<ul><li><b>Edit host</b>: Right-click a host in the list and select 'Edit' "
+"to change its address (available for a single host).</li><li><b>Delete host</"
+"b>: Select one or more hosts, right-click, and select 'Delete' to remove "
+"them.</li><li><b>Change check type</b>: Right-click a host, select 'Check "
+"Type', and choose 'ICMP Ping' or 'TCP Port'. For TCP, specify a port number "
+"(1–65535). Available for a single host.</li><li><b>Reorder hosts</b>: Drag "
+"and drop hosts within or between categories to change their order.</"
+"li><li><b>Group hosts</b>: Select one or more hosts, right-click, and select "
+"'Set Category' to assign them to an existing category or create a new one. "
+"Categories are collapsible and show the number of hosts in parentheses. "
+"Graphs are grouped by categories with separators.</li><li><b>Navigate to "
+"graph</b>: Double-click a host in the list to scroll to its graph.</"
+"li><li><b>Filter hosts</b>: Click 'Show Failed Hosts' to display only hosts "
+"with a failed last check. Click 'Show All Hosts' to return to the full list."
+"</li><li><b>Prioritize host check</b>: Double-click a host's graph to "
+"temporarily prioritize its check, ensuring it is checked next without "
+"changing its position in the list or graph order.</li></ul>"
+msgstr ""
+"<ul><li><b>Редактировать узел</b>: Щелкните правой кнопкой мыши узел в "
+"списке и выберите \"Редактировать\", чтобы изменить его адрес (доступно для "
+"одного узла).</li><li><b>Удалить узел</b>: Выберите один или несколько "
+"узлов, щелкните правой кнопкой мыши и выберите \"Удалить\", чтобы удалить их."
+"</li><li><b>Изменить тип проверки</b>: Щелкните правой кнопкой мыши узел, "
+"выберите \"Тип проверки\" и выберите \"ICMP Ping\" или \"TCP-порт\". Для "
+"протокола TCP укажите номер порта (1-65535). Доступно для одного хоста.</"
+"li><li><b>Переупорядочить хосты</b>: Перетаскивайте хосты внутри категорий "
+"или между ними, чтобы изменить их порядок.</li><li><b>Сгруппировать хосты</"
+"b>: Выберите один или несколько хостов, нажмите и выберите \"Установить "
+"категорию\", чтобы отнести их к существующей категории или создать новую. "
+"Категории являются разборными и в круглых скобках указано количество хостов. "
+"Графики сгруппированы по категориям с разделителями.</li><li><b>Переход к "
+"графику</b>: дважды щелкните узел в списке, чтобы перейти к его графику.</"
+"li><li><b>Отфильтровать узлы</b>: нажмите \"Только недоступные хосты\" для "
+"отображения только хостов с неудачной последней проверкой. Нажмите "
+"\"Показать все хосты\", чтобы вернуться к полному списку.</"
+"li><li><b>Форсировать проверку хоста</b>: Дважды щелкните на графике хоста.</"
+"li></ul>"
+
+#: main.py:700
+msgid "<h3>Time Scale</h3>"
+msgstr "<h3>Временная шкала</h3>"
+
+#: main.py:701
+msgid ""
+"<ul><li><b>Zoom</b>: Click on the time scale to set start and end points for "
+"zooming. Right-click to reset to default (1 hour centered on current time).</"
+"li><li><b>Scroll zoom</b>: Use the mouse wheel to zoom in/out while "
+"maintaining the cursor's time position.</li><li><b>View history</b>: The "
+"graph shows ping results as green (success) or red (failure) bars.</li></ul>"
+msgstr ""
+"<ul><li><b>Масштабирование</b>: Щелкните по шкале времени, чтобы задать "
+"начальную и конечную точки для масштабирования. Щелкните правой кнопкой "
+"мыши, чтобы вернуться к значению по умолчанию (1 час по текущему времени).</"
+"li><li><b>Масштаб прокрутки</b>: Используйте колесико мыши для увеличения / "
+"уменьшения масштаба, сохраняя при этом положение курсора по времени.</"
+"li><li><b>Просмотр истории</b>: На графике результаты проверки связи "
+"отображаются в виде зеленых (успешных) или красных (неудачных) полос. Желтых "
+"- единичных провалов.</li></ul>"
+
+#: main.py:706
+msgid "<h3>System Tray</h3>"
+msgstr "<h3>Системный трэй</h3>"
+
+#: main.py:707
+msgid ""
+"<ul><li><b>Minimize</b>: Closing the window minimizes the application to the "
+"system tray.</li><li><b>Restore</b>: Double-click the tray icon or select "
+"'Restore' from the tray menu to show the window.</li><li><b>Quit</b>: Select "
+"'Quit' from the tray menu to close the application.</li></ul>"
+msgstr ""
+"<ul><li><b>Свернуть</b>: При закрытии окна приложение будет перенесено в "
+"системный трей.</li><li><b>Восстановить</b>: Дважды щелкните значок в трее "
+"или выберите \"Восстановить\" в меню трея, чтобы отобразить окно.</"
+"li><li><b>Выход</b>: Выберите \"Выход\" в меню в трее, чтобы закрыть "
+"приложение.</li></ul>"
+
+#: main.py:772 main.py:1080
+msgid "Edit"
+msgstr "Редактировать"
+
+#: main.py:776 main.py:870
+msgid "Delete"
+msgstr "Удалить"
+
+#: main.py:779
+msgid "Check Type"
+msgstr "Тип проверки"
+
+#: main.py:780
+msgid "ICMP Ping"
+msgstr "ICMP Ping"
+
+#: main.py:781 main.py:807
+msgid "TCP Port"
+msgstr "Порт TCP"
+
+#: main.py:789 main.py:825
+msgid "Set Category"
+msgstr "Установить категорию"
+
+#: main.py:807
+msgid "Enter port number (1-65535):"
+msgstr "Введите номер порта(1-65535):"
+
+#: main.py:829
+msgid "New Category"
+msgstr "Новая категория"
+
+#: main.py:834
+msgid "Enter new category name"
+msgstr "Название категории"
+
+#: main.py:870
+msgid "Delete {} hosts?"
+msgstr "Удалить {} хосты?"
+
+#: main.py:919
+msgid "Select host file"
+msgstr "Выбрать файл с хостами"
+
+#: main.py:919
+msgid "Text files (*.txt);;All files (*)"
+msgstr "Text files (*.txt);;All files (*)"
+
+#: main.py:943
+msgid "Import completed"
+msgstr "Импорт завершен"
+
+#: main.py:944
+msgid "Successfully added {} hosts from file."
+msgstr "Успешно добавлено {}"
+
+#: main.py:947
+msgid "Import failed"
+msgstr "Не удалось импортировать"
+
+#: main.py:948
+msgid "No new hosts added (they may already exist)."
+msgstr "Новые хосты отсутствуют (добавлены ранее)"
+
+#: main.py:951
+msgid "Import error"
+msgstr "Ошибка импорта"
+
+#: main.py:952
+msgid "Failed to read file: {}"
+msgstr "Ошибка чтения файла: {}"
+
+#: main.py:1042
+msgid "Host unavailable"
+msgstr "Хост недоступен"
+
+#: main.py:1043
+msgid "Host {} is not responding to check"
+msgstr "Сервер {} не отвечает"
+
+#: main.py:1080
+msgid "New host name:"
+msgstr "Новое имя"
