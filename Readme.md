@@ -40,6 +40,8 @@ Screenshot:
    $ python --version
 2. Установить PyQt6:
    $ pip install PyQt6
+   или
+   $ apt install python3 python3-pyqt6
 
 #### Запуск приложения
 1. Клонировать репозиторий или скачать исходный код:
@@ -126,6 +128,8 @@ Screenshot:
    $ python --version
 2. Install PyQt6:
    $ pip install PyQt6
+   or
+   $ apt install python3 python3-pyqt6
 
 #### Running the Application
 1. Clone the repository or download the source code:
