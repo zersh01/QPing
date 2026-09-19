@@ -1,0 +1,20 @@
+Source: qping
+Section: net
+Priority: optional
+Maintainer: Sergei Parhomenko <zersh@mail.ru>
+Build-Depends: debhelper-compat (= 13),
+               dh-python,
+               python3-all
+Standards-Version: 4.6.2
+Homepage: https://github.com/zersh01/QPing
+XS-Python-Version: >= 3.8
+
+Package: qping
+Architecture: all
+Depends: ${python3:Depends},
+         ${misc:Depends},
+         python3-pyqt6
+Recommends: fping
+Description: Network host monitor with ICMP ping and TCP port checks
+ QPing monitors availability of network hosts via ICMP ping or TCP
+ port checks. It stores history, shows graphs, and supports alerts.

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Version=2.0
+Name=QPing
+Name[ru]=QPing
+Comment=Network host monitor with ICMP ping and TCP port checks
+Comment[ru]=Мониторинг хостов через ICMP ping и TCP-порты
+Exec=qping
+Icon=qping
+Terminal=false
+Categories=Network;Monitor;Utility;
+Keywords=ping;monitor;network;icmp;tcp;uptime;
+StartupNotify=true

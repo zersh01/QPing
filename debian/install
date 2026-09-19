@@ -1,0 +1,10 @@
+qping                       usr/bin/
+main.py                     usr/lib/python3/dist-packages/qping/
+ping_manager.py             usr/lib/python3/dist-packages/qping/
+ping_widgets.py             usr/lib/python3/dist-packages/qping/
+utils.py                    usr/lib/python3/dist-packages/qping/
+help.py                     usr/lib/python3/dist-packages/qping/
+qping.svg                   usr/share/icons/hicolor/scalable/apps/
+debian/qping.desktop        usr/share/applications/
+translations/               usr/share/
+Readme.md                   usr/share/doc/qping/

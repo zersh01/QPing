@@ -9,15 +9,16 @@
 
 ### Описание проекта
 
-**QPing** — GUI приложение для мониторинга доступности сетевых хостов по ICMP или TCP-портов. 
-Оно предоставляет визуальное отображение статуса хостов в виде графиков, 
-поддерживает категоризацию хостов, локализацию интерфейса и уведомления через системный трей. 
+**QPing** — GUI приложение для мониторинга доступности сетевых хостов по ICMP или TCP-портов.
+Оно предоставляет визуальное отображение статуса хостов в виде графиков,
+поддерживает категоризацию хостов, локализацию интерфейса и уведомления через системный трей.
 Написан на Python с использованием библиотеки PyQt6.
 
 Screenshot:
-![alt text](https://github.com/zersh01/QPing/raw/main/qping.png "QPing")
+![QPing screenshot](https://github.com/zersh01/QPing/raw/main/Screenshot.png "QPing")
 
 #### Основные возможности:
+
 - Мониторинг хостов через ICMP или TCP-проверки.
 - Визуализация результатов пинга в виде графиков с масштабируемой временной шкалой.
 - Поддержка категорий для группировки хостов.
@@ -30,58 +31,86 @@ Screenshot:
 
 ### Установка
 
-#### Требования
-- Python 3.8+
-- PyQt6
-- Операционная система: Windows, macOS или Linux
+#### Способ 1: PPA (Ubuntu 22.04+)
 
-#### Установка зависимостей
-1. Проверить, установлен ли Python:
-   $ python --version
-2. Установить PyQt6:
-   $ pip install PyQt6
+Для пользователей Ubuntu 22.04, 24.04 и новее доступна установка через PPA с автоматическими обновлениями:
+
+```bash
+sudo add-apt-repository ppa:zersh01/qping
+sudo apt update
+sudo apt install qping
+```
+
+Запуск: `qping` из терминала или через меню приложений.
+
+Удаление:
+
+```bash
+sudo apt remove qping
+sudo add-apt-repository --remove ppa:zersh01/qping
+```
+
+Для работы batch-режима ICMP рекомендуется установить `fping`:
+
+```bash
+sudo apt install fping
+```
+
+#### Способ 2: Из исходников через git
+
+1. Клонировать репозиторий:
+
+   ```bash
+   git clone https://github.com/zersh01/QPing.git
+   cd QPing
+   ```
+
+2. Установить зависимости:
+
+   ```bash
+   sudo apt install python3 python3-pyqt6
+   # опционально — для batch-режима
+   sudo apt install fping
+   ```
+
+3. Установить ярлык в меню и на рабочий стол:
+
+   ```bash
+   chmod +x install.sh uninstall.sh run.sh
+   ./install.sh
+   ```
+
+После этого QPing появится в меню приложений и на рабочем столе.
+
+Удаление ярлыков:
+
+```bash
+./uninstall.sh
+```
+
+#### Способ 3: Ручной запуск без установки
+
+1. Установить зависимости (см. выше).
+2. Запустить приложение напрямую:
+
+   ```bash
+   ./qping.py
+   ```
+
    или
-   $ apt install python3 python3-pyqt6
 
-#### Запуск приложения
-1. Клонировать репозиторий или скачать исходный код:
-   $ git clone <repository_url>
-   $ cd ping-monitor
-2. Запустить приложение:
-   $ python qping.py
-или бинарный файл:
-   $ dist/qping
+   ```bash
+   python3 qping.py
+   ```
 
+### Требования
 
-### Сборка в бинарный файл с PyInstaller
-
-1. Установить PyInstaller:
-   $ pip install pyinstaller
-2. Выполнить сборку:
-   $ pyinstaller --noconsole --onefile --name qping \
-    --add-data "translations/ru/LC_MESSAGES/qping.mo:translations/ru/LC_MESSAGES" \
-    --add-data "translations/en/LC_MESSAGES/qping.mo:translations/en/LC_MESSAGES" qping.py
-3. Найти исполняемый файл в папке `dist/qping`.
-
-### 🌍 Локализация на другие языки
-
-1. Создать шаблон .pot:
-   $ xgettext -L Python --output=translations/qping.pot *.py
-2. Создать .po файл для нового языка (например, французский):
-   $ msginit -i translations/qping.pot -l fr -o translations/fr/LC_MESSAGES/qping.po
-3. Заполнить переводы в .po файле с помощью редактора, например, Poedit, или вручную.
-4. Скомпилировать .po в .mo:
-   $ msgfmt translations/fr/LC_MESSAGES/qping.po -o translations/fr/LC_MESSAGES/qping.mo
-5. Добавить язык в приложение:
-   - Отредактировать метод `setup_ui` в `main.py`, добавив новое действие в меню `language_menu`:
-   
-     fr_action = QAction("Français", self)
-     fr_action.triggered.connect(lambda: self.change_language("fr"))
-     language_menu.addAction(fr_action)
-   
-6. Перезапустить приложение и выбрать новый язык в меню "Язык".
+- Python 3.10+
+- PyQt6
+- Операционная система: Linux (Ubuntu 22.04+ рекомендуется), Windows, macOS
 
 ### Использование
+
 1. Запустить приложение.
 2. Добавить хост через поле ввода или импортировать из файла.
 3. Настроить интервал проверки с помощью ползунка.
@@ -89,7 +118,61 @@ Screenshot:
 5. Дважды щелкнуть по графику хоста, чтобы приоритизировать его проверку.
 6. Использовать временную шкалу для масштабирования истории пингов.
 
+### 🌍 Локализация на другие языки
+
+1. Создать шаблон `.pot`:
+
+   ```bash
+   xgettext -L Python --output=translations/qping.pot *.py
+   ```
+
+2. Создать `.po` файл для нового языка (например, французский):
+
+   ```bash
+   msginit -i translations/qping.pot -l fr -o translations/fr/LC_MESSAGES/qping.po
+   ```
+
+3. Заполнить переводы в `.po` файле с помощью редактора, например, Poedit, или вручную.
+
+4. Скомпилировать `.po` в `.mo`:
+
+   ```bash
+   msgfmt translations/fr/LC_MESSAGES/qping.po -o translations/fr/LC_MESSAGES/qping.mo
+   ```
+
+5. Добавить язык в приложение — отредактировать метод `setup_ui` в `main.py`, добавив новое действие в меню `Language`:
+
+   ```python
+   fr_action = QAction("Français", self)
+   fr_action.triggered.connect(lambda: self.change_language("fr"))
+   self.menu_lang.addAction(fr_action)
+   ```
+
+   И не забудьте добавить аналогичную строку в `retranslate_ui`.
+
+6. Перезапустить приложение и выбрать новый язык в меню "Language".
+
+### Сборка в бинарный файл с PyInstaller
+
+1. Установить PyInstaller:
+
+   ```bash
+   pip install pyinstaller
+   ```
+
+2. Выполнить сборку:
+
+   ```bash
+   pyinstaller --noconsole --onefile --name qping \
+       --add-data "translations/ru/LC_MESSAGES/qping.mo:translations/ru/LC_MESSAGES" \
+       --add-data "translations/en/LC_MESSAGES/qping.mo:translations/en/LC_MESSAGES" \
+       qping.py
+   ```
+
+3. Найти исполняемый файл в папке `dist/qping`.
+
 ### Лицензия
+
 MIT License
 
 ---
@@ -98,14 +181,15 @@ MIT License
 
 ### Project Description
 
-**QPing** is a desktop application for monitoring the availability of network hosts using ICMP pings or TCP port checks. 
-It provides a visual representation of host status through graphs, supports host categorization, 
+**QPing** is a desktop application for monitoring the availability of network hosts using ICMP pings or TCP port checks.
+It provides a visual representation of host status through graphs, supports host categorization,
 interface localization, and system tray notifications. The application is built with Python using the PyQt6 library.
 
 Screenshot:
-![alt text](https://github.com/zersh01/QPing/raw/main/qping.png "QPing")
+![QPing screenshot](https://github.com/zersh01/QPing/raw/main/Screenshot.png "QPing")
 
 #### Key Features:
+
 - Monitor hosts via ICMP or TCP checks.
 - Visualize ping results with graphs and a scalable timeline.
 - Categorize hosts for better organization.
@@ -118,64 +202,146 @@ Screenshot:
 
 ### Installation
 
-#### Requirements
-- Python 3.8+
-- PyQt6
-- Operating System: Windows, macOS, or Linux
+#### Option 1: PPA (Ubuntu 22.04+)
 
-#### Installing Dependencies
-1. Check if Python is installed:
-   $ python --version
-2. Install PyQt6:
-   $ pip install PyQt6
+For Ubuntu 22.04, 24.04 and newer, install via PPA with automatic updates:
+
+```bash
+sudo add-apt-repository ppa:zersh01/qping
+sudo apt update
+sudo apt install qping
+```
+
+Launch: `qping` from terminal or via the applications menu.
+
+Uninstall:
+
+```bash
+sudo apt remove qping
+sudo add-apt-repository --remove ppa:zersh01/qping
+```
+
+For ICMP batch mode, install `fping`:
+
+```bash
+sudo apt install fping
+```
+
+#### Option 2: From source via git
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/zersh01/QPing.git
+   cd QPing
+   ```
+
+2. Install dependencies:
+
+   ```bash
+   sudo apt install python3 python3-pyqt6
+   # optional — for batch mode
+   sudo apt install fping
+   ```
+
+3. Install menu/desktop shortcuts:
+
+   ```bash
+   chmod +x install.sh uninstall.sh run.sh
+   ./install.sh
+   ```
+
+QPing will appear in the applications menu and on the desktop.
+
+Remove shortcuts:
+
+```bash
+./uninstall.sh
+```
+
+#### Option 3: Manual run without installation
+
+1. Install dependencies (see above).
+2. Run the application directly:
+
+   ```bash
+   ./qping.py
+   ```
+
    or
-   $ apt install python3 python3-pyqt6
 
-#### Running the Application
-1. Clone the repository or download the source code:
-   $ git clone <repository_url>
-   $ cd ping-monitor
-2. Run the application:
-   $ python qping.py
-or run binary file:
-   $ dist/qping
+   ```bash
+   python3 qping.py
+   ```
 
-### Building a Binary with PyInstaller
+### Requirements
 
-1. Install PyInstaller:
-   $ pip install pyinstaller
-2. Build the binary:
-   $ pyinstaller --noconsole --onefile --name qping \
-    --add-data "translations/ru/LC_MESSAGES/qping.mo:translations/ru/LC_MESSAGES" \
-    --add-data "translations/en/LC_MESSAGES/qping.mo:translations/en/LC_MESSAGES" qping.py
-3. Find the executable in the `dist/qping` folder.
-
-
-### 🌍 Localization to Other Languages
-
-1. Create a .pot template:
-   $ xgettext -L Python --output=translations/qping.pot *.py
-2. Create a .po file for the new language (e.g., French):
-   $ msginit -i translations/qping.pot -l fr -o translations/fr/LC_MESSAGES/qping.po
-3. Fill in translations in the .po file using a tool like Poedit or manually.
-4. Compile .po to .mo:
-   $ msgfmt translations/fr/LC_MESSAGES/qping.po -o translations/fr/LC_MESSAGES/qping.mo
-5. Add the language to the application:
-   - Edit the `setup_ui` method in `main.py` to add a new action to the `language_menu`:
-   
-     fr_action = QAction("Français", self)
-     fr_action.triggered.connect(lambda: self.change_language("fr"))
-     language_menu.addAction(fr_action)
-   
-6. Restart the application and select the new language from the "Language" menu.
+- Python 3.10+
+- PyQt6
+- Operating System: Linux (Ubuntu 22.04+ recommended), Windows, macOS
 
 ### Usage
+
 1. Launch the application.
 2. Add a host via the input field or import from a file.
 3. Adjust the check interval using the slider.
 4. Use the context menu to edit, delete, or change the check type for a host.
-5. Double-click a host’s graph to prioritize its check.
+5. Double-click a host's graph to prioritize its check.
 6. Use the timeline to zoom in/out on ping history.
 
+### 🌍 Localization to Other Languages
+
+1. Create a `.pot` template:
+
+   ```bash
+   xgettext -L Python --output=translations/qping.pot *.py
+   ```
+
+2. Create a `.po` file for the new language (e.g., French):
+
+   ```bash
+   msginit -i translations/qping.pot -l fr -o translations/fr/LC_MESSAGES/qping.po
+   ```
+
+3. Fill in translations in the `.po` file using a tool like Poedit or manually.
+
+4. Compile `.po` to `.mo`:
+
+   ```bash
+   msgfmt translations/fr/LC_MESSAGES/qping.po -o translations/fr/LC_MESSAGES/qping.mo
+   ```
+
+5. Add the language to the application — edit the `setup_ui` method in `main.py`, adding a new action to the `Language` menu:
+
+   ```python
+   fr_action = QAction("Français", self)
+   fr_action.triggered.connect(lambda: self.change_language("fr"))
+   self.menu_lang.addAction(fr_action)
+   ```
+
+   Also add a matching line in `retranslate_ui`.
+
+6. Restart the application and select the new language from the "Language" menu.
+
+### Building a Binary with PyInstaller
+
+1. Install PyInstaller:
+
+   ```bash
+   pip install pyinstaller
+   ```
+
+2. Build the binary:
+
+   ```bash
+   pyinstaller --noconsole --onefile --name qping \
+       --add-data "translations/ru/LC_MESSAGES/qping.mo:translations/ru/LC_MESSAGES" \
+       --add-data "translations/en/LC_MESSAGES/qping.mo:translations/en/LC_MESSAGES" \
+       qping.py
+   ```
+
+3. Find the executable in the `dist/qping` folder.
+
 ### License
+
 MIT License

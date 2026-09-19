@@ -1,0 +1,38 @@
+qping (2.0-3) UNRELEASED; urgency=medium
+
+  * Fix upload path
+  * Fix upload path
+
+ -- Sergei Parhomenko <zersh@mail.ru>  Sat, 19 Sep 2026 21:55:40 +0300
+
+qping (2.0) jammy; urgency=medium
+
+  * Batch mode for fping with configurable batch size (default: 5 hosts per tick).
+  * TCP port check (type: tcp, tag: [p:PORT]).
+  * Latency measurement for ICMP (via fping/ping parsing) and TCP (perf_counter).
+  * "Ping now" feature for on-demand host checks.
+
+  * Statistics and graphs:
+    - Overall statistics in tooltip: Min/Avg/Max/Median/95th, Jitter (lifetime).
+    - 5-minute sliding window statistics: Min/Avg/Max, Jitter.
+    - Categories with drag-and-drop support and auto-creation during import.
+
+  * Host management:
+    - Disable host monitoring without deletion (state is preserved).
+    - Summary dashboard: Total / OK / Warn / Down / Disabled / Loss% / Engine.
+
+  * Keyboard shortcuts:
+    - Window minimization via Esc (optional), Ctrl+W, Ctrl+Q.
+
+  * Import/Export:
+    - Ansible INI (first field = hostname).
+    - Ansible YAML (via PyYAML).
+    - /etc/hosts (second field = hostname).
+    - Simple line-by-line list.
+    - Auto-creation of categories from Ansible groups.
+    - QPing backup export/import (.qping.json) with Replace/Merge options.
+
+  * Event hooks:
+    - on_host_down.sh, on_host_up.sh with environment variables.
+
+ -- zersh <zersh@mail.ru>  Thu, 19 Sep 2026 19:00:00 +0300
