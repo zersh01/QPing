@@ -1,9 +1,10 @@
-qping (2.0-3) UNRELEASED; urgency=medium
+qping (2.1) jammy; urgency=medium
 
   * Fix upload path
-  * Fix upload path
+  * Fix module paths and translations location
+  * Fix source format, copyright, control
 
- -- Sergei Parhomenko <zersh@mail.ru>  Sat, 19 Sep 2026 21:55:40 +0300
+ -- Sergei Parhomenko <zersh@mail.ru>  Sun, 20 Sep 2026 00:56:31 +0300
 
 qping (2.0) jammy; urgency=medium
 

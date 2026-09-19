@@ -7,7 +7,6 @@ Build-Depends: debhelper-compat (= 13),
                python3-all
 Standards-Version: 4.6.2
 Homepage: https://github.com/zersh01/QPing
-XS-Python-Version: >= 3.8
 
 Package: qping
 Architecture: all
