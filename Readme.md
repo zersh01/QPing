@@ -15,7 +15,7 @@
 Написан на Python с использованием библиотеки PyQt6.
 
 Screenshot:
-![QPing screenshot](https://github.com/zersh01/QPing/raw/main/Screenshot.png "QPing")
+![QPing screenshot](https://github.com/zersh01/QPing/raw/main/images/Screenshot.png "QPing")
 
 #### Основные возможности:
 
@@ -186,7 +186,7 @@ It provides a visual representation of host status through graphs, supports host
 interface localization, and system tray notifications. The application is built with Python using the PyQt6 library.
 
 Screenshot:
-![QPing screenshot](https://github.com/zersh01/QPing/raw/main/Screenshot.png "QPing")
+![QPing screenshot](https://github.com/zersh01/QPing/raw/main/images/Screenshot.png "QPing")
 
 #### Key Features:
 
