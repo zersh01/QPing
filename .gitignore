@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+dist/
+build/
+*.deb
+*.dsc
+*.changes
+*.tar.gz
+*.buildinfo
+private-key.asc
+*.b64
