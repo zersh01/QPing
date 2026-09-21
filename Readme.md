@@ -36,7 +36,7 @@ Screenshot:
 Для пользователей Ubuntu 22.04, 24.04 и новее доступна установка через PPA с автоматическими обновлениями:
 
 ```bash
-sudo add-apt-repository ppa:zersh01/qping
+sudo add-apt-repository ppa:zersh/qping
 sudo apt update
 sudo apt install qping
 ```
@@ -61,7 +61,7 @@ sudo apt install fping
 1. Клонировать репозиторий:
 
    ```bash
-   git clone https://github.com/zersh01/QPing.git
+   git clone https://github.com/zersh/QPing.git
    cd QPing
    ```
 
@@ -218,7 +218,7 @@ Uninstall:
 
 ```bash
 sudo apt remove qping
-sudo add-apt-repository --remove ppa:zersh01/qping
+sudo add-apt-repository --remove ppa:zersh/qping
 ```
 
 For ICMP batch mode, install `fping`:
@@ -232,7 +232,7 @@ sudo apt install fping
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/zersh01/QPing.git
+   git clone https://github.com/zersh/QPing.git
    cd QPing
    ```
 
