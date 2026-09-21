@@ -47,7 +47,7 @@ sudo apt install qping
 
 ```bash
 sudo apt remove qping
-sudo add-apt-repository --remove ppa:zersh01/qping
+sudo add-apt-repository --remove ppa:zersh/qping
 ```
 
 Для работы batch-режима ICMP рекомендуется установить `fping`:
@@ -207,7 +207,7 @@ Screenshot:
 For Ubuntu 22.04, 24.04 and newer, install via PPA with automatic updates:
 
 ```bash
-sudo add-apt-repository ppa:zersh01/qping
+sudo add-apt-repository ppa:zersh/qping
 sudo apt update
 sudo apt install qping
 ```
