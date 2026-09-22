@@ -94,13 +94,13 @@ sudo apt install fping
 2. Запустить приложение напрямую:
 
    ```bash
-   ./qping.py
+   ./run.sh
    ```
 
    или
 
    ```bash
-   python3 qping.py
+   python3 qping
    ```
 
 ### Требования
@@ -265,13 +265,13 @@ Remove shortcuts:
 2. Run the application directly:
 
    ```bash
-   ./qping.py
+   ./run.sh
    ```
 
    or
 
    ```bash
-   python3 qping.py
+   python3 qping
    ```
 
 ### Requirements
