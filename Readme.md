@@ -301,17 +301,7 @@ Remove shortcuts:
    msgfmt translations/fr/LC_MESSAGES/qping.po -o translations/fr/LC_MESSAGES/qping.mo
    ```
 
-5. Add the language to the application — edit the `setup_ui` method in `main.py`, adding a new action to the `Language` menu:
-
-   ```python
-   fr_action = QAction("Français", self)
-   fr_action.triggered.connect(lambda: self.change_language("fr"))
-   self.menu_lang.addAction(fr_action)
-   ```
-
-   Also add a matching line in `retranslate_ui`.
-
-6. Restart the application and select the new language from the "Language" menu.
+5. Restart the application and select a new language in the "Language" menu.
 
 ### Building a Binary with PyInstaller
 
