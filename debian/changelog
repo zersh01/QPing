@@ -1,3 +1,9 @@
+qping (2.3) jammy; urgency=medium
+
+  * Release 2.3: remove tests
+
+ -- Sergei Parhomenko <zersh@mail.ru>  Tue, 29 Sep 2026 23:44:15 +0300
+
 qping (2.2) jammy; urgency=medium
 
   * Upload historical data on a daily basis, rather than all at once

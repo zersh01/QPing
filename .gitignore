@@ -15,3 +15,7 @@ requirements-dev.txt
 run_tests.sh
 smoke.sh
 tests/
+snap/
+snapcraft.yaml
+pyproject.toml
+*.snap

@@ -2815,8 +2815,13 @@ class PingMonitor(QMainWindow):
                 w.session_failure_count, self.app_start_time)
 
 
-if __name__ == "__main__":
+def main_entry():
+    """Entry point for console_scripts (used by Snap, pip install)."""
     app = QApplication(sys.argv)
     window = PingMonitor()
     window.show()
-    sys.exit(app.exec())
+    return app.exec()
+
+
+if __name__ == "__main__":
+    sys.exit(main_entry())
