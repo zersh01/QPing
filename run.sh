@@ -1,18 +1,19 @@
 #!/usr/bin/env bash
-# QPing launcher — устойчивый запуск с автоматическим поиском python с PyQt6.
-# Лог ошибок: ~/.config/QPing/qping.log
-# Требуется для ярлыков
+# QPing launcher — robust startup with automatic discovery of a python
+# interpreter that has PyQt6 installed.
+# Error log: ~/.config/QPing/qping.log
+# Required for the .desktop shortcuts.
 
 cd "$(dirname "$(readlink -f "$0")")" || exit 1
 
 LOG="$HOME/.config/QPing/qping.log"
 mkdir -p "$(dirname "$LOG")"
 
-# Ищем python с PyQt6 в порядке приоритета:
-#   1. myenv пользователя (текущая установка)
-#   2. venv/ или .venv/ рядом с проектом
-#   3. ~/.local/bin/python3 (пользовательский pip --user)
-#   4. системный python3
+# Find a python with PyQt6, in priority order:
+#   1. the user's myenv (current installation)
+#   2. venv/ or .venv/ next to the project
+#   3. ~/.local/bin/python3 (user-level pip --user)
+#   4. system python3
 PY=""
 for candidate in \
     "$HOME/myenv/bin/python3" \

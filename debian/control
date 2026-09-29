@@ -4,7 +4,8 @@ Priority: optional
 Maintainer: Sergei Parhomenko <zersh@mail.ru>
 Build-Depends: debhelper-compat (= 13),
                dh-python,
-               python3-all
+               python3-all,
+               gettext
 Standards-Version: 4.6.2
 Homepage: https://github.com/zersh01/QPing
 

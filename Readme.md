@@ -15,7 +15,7 @@
 Написан на Python с использованием библиотеки PyQt6.
 
 Screenshot:
-![QPing screenshot](https://github.com/zersh01/QPing/raw/main/images/Screenshot.png "QPing")
+![QPing screenshot](https://github.com/zersh01/QPing/raw/main/images/Screenshot_light.png "QPing")
 
 #### Основные возможности:
 
@@ -140,16 +140,6 @@ sudo apt install fping
    msgfmt translations/fr/LC_MESSAGES/qping.po -o translations/fr/LC_MESSAGES/qping.mo
    ```
 
-5. Добавить язык в приложение — отредактировать метод `setup_ui` в `main.py`, добавив новое действие в меню `Language`:
-
-   ```python
-   fr_action = QAction("Français", self)
-   fr_action.triggered.connect(lambda: self.change_language("fr"))
-   self.menu_lang.addAction(fr_action)
-   ```
-
-   И не забудьте добавить аналогичную строку в `retranslate_ui`.
-
 6. Перезапустить приложение и выбрать новый язык в меню "Language".
 
 ### Сборка в бинарный файл с PyInstaller
@@ -186,7 +176,7 @@ It provides a visual representation of host status through graphs, supports host
 interface localization, and system tray notifications. The application is built with Python using the PyQt6 library.
 
 Screenshot:
-![QPing screenshot](https://github.com/zersh01/QPing/raw/main/images/Screenshot.png "QPing")
+![QPing screenshot](https://github.com/zersh01/QPing/raw/main/images/Screenshot_light.png "QPing")
 
 #### Key Features:
 

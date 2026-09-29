@@ -9,3 +9,9 @@ build/
 *.buildinfo
 private-key.asc
 *.b64
+.pytest_cache/
+pytest.ini
+requirements-dev.txt
+run_tests.sh
+smoke.sh
+tests/

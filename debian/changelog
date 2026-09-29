@@ -1,3 +1,25 @@
+qping (2.2) jammy; urgency=medium
+
+  * Upload historical data on a daily basis, rather than all at once
+  * Added the ability to set the response waiting time.
+  * Added mute or mute - for a specific host - i.e. continue to check, but do not notify about problems.
+  * Migration from the old version ~/.ping_monitor_history has been removed.json
+  * Y-axis with latency
+  * Dark theme
+  * Down/Warn clickable — the click switches filter_failed.
+  * Tray and notifications
+    - A badge with the number of down hosts on the tray icon.
+    - Grouping notifications. If 5 hosts have fallen in a row, one "5 hosts down" notification is sent
+  * Compact/expanded graphics mode. 
+  * Simplified the ability to add new languages
+  * Keyboard shortcuts 
+    - Ctrl+F Focus on Search
+    - Ctrl+R Changing the graph mode display (Compact -> Normal -> Ext)
+  * BugFix: the focus on the found servers is not saved when using the search
+  * BugFix: fix the renaming problem: if the host has been renamed (edit_host), the history directory remains under the old name.
+
+ -- Sergei Parhomenko <zersh@mail.ru>  Tue, 29 Sep 2026 16:09:52 +0300
+
 qping (2.1) jammy; urgency=medium
 
   * Fix upload path

@@ -1,6 +1,6 @@
 # main.py
 """
-QPing — главное окно. Запуск приложения.
+QPing — main window. Run
 
 """
 APP_VERSION = "2.0"
@@ -8,7 +8,9 @@ APP_VERSION = "2.0"
 import sys
 import json
 import os
+import shutil
 import subprocess
+import gzip
 
 from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (
@@ -16,25 +18,44 @@ from PyQt6.QtWidgets import (
     QTreeWidgetItem, QLineEdit, QLabel, QMessageBox, QInputDialog, QSlider,
     QScrollArea, QFrame, QMenu, QPushButton, QSystemTrayIcon,
     QFileDialog, QDialog, QComboBox, QDialogButtonBox, QTextEdit,
-    QSpinBox, QFormLayout, QCheckBox, QTabWidget, QGraphicsOpacityEffect
+    QSpinBox, QFormLayout, QCheckBox, QTabWidget, QGraphicsOpacityEffect,
+    QStyle
 )
 from PyQt6.QtCore import (
     Qt, QSettings, QTimer, QThreadPool, QPropertyAnimation,
-    QEasingCurve, pyqtSignal, pyqtSlot, QObject, QRunnable
+    QEasingCurve, pyqtSignal, pyqtSlot, QObject, QRunnable, QPoint
 )
-from PyQt6.QtGui import QColor, QFont, QIcon, QPixmap, QAction, QKeySequence, QPainter
+from PyQt6.QtGui import (
+    QColor, QFont, QIcon, QPixmap, QAction, QActionGroup,
+    QKeySequence, QPainter, QFontMetrics
+)
 
 from ping_manager import PingManager, PingWorker, has_fping
-from ping_widgets import TimeScaleWidget, HostWidget
+from ping_widgets import TimeScaleWidget, HostWidget, PingGraphWidget
+from theme import palette, apply_theme
 from utils import (
-    CONFIG_DIR, HISTORY_DIR, HOOKS_DIR_DEFAULT, OLD_HISTORY_FILE,
+    CONFIG_DIR, HISTORY_DIR, HOOKS_DIR_DEFAULT,
     setup_localization, read_bool_setting, read_int_setting, host_safe_name,
     detect_import_format, parse_ansible_ini, parse_ansible_yaml,
     parse_hosts_file, parse_plain_list, parse_backup, build_backup,
+    discover_languages,
 )
 
 
-# ---------- Асинхронное сохранение ----------
+class ClickableLabel(QLabel):
+    """QLabel that reacts to a left mouse click. Signal `clicked`."""
+
+    clicked = pyqtSignal()
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.clicked.emit()
+            event.accept()
+            return
+        super().mousePressEvent(event)
+
+
+# ---------- Asynchronous save ----------
 
 class _SaveSignals(QObject):
     finished = pyqtSignal(dict)
@@ -71,10 +92,13 @@ class SaveWorker(QRunnable):
             except Exception as e:
                 print(f"[save] error for {host}: {e}")
                 result[host] = None
-        self.signals.finished.emit(result)
+        try:
+            self.signals.finished.emit(result)
+        except RuntimeError:
+            pass
 
 
-# ---------- Хуки ----------
+# ---------- Hooks ----------
 
 class HookWorker(QRunnable):
     def __init__(self, script_path, env_vars):
@@ -99,39 +123,34 @@ class HookWorker(QRunnable):
             print(f"[hook] {self.script_path}: {e}")
 
 
-# ---------- Фоновый загрузчик истории ----------
+# ---------- Per-day history loading ----------
 
-class _LoadSignals(QObject):
-    finished = pyqtSignal(dict)   # {host: {'records': [...], 'latest_time': datetime|None}}
-
-
-def read_history_files(host_dir, hours_limit=None):
-    """Читает все .jsonl в host_dir. hours_limit=None → без ограничения.
-    Возвращает (records, latest_time). Не зависит от self, пригодна для потока."""
-    if hours_limit is None:
-        cutoff = None
-    else:
-        cutoff = datetime.now() - timedelta(hours=hours_limit)
-
-    records = []
-    latest_time = None
+def list_history_days(host_dir):
     try:
         entries = os.listdir(host_dir)
-    except Exception as e:
-        print(f"Error listing {host_dir}: {e}")
-        return records, latest_time
-
+    except Exception:
+        return []
+    days = []
     for fname in entries:
         if not fname.endswith(".jsonl"):
             continue
         day_str = fname[:-6]
         try:
-            d = datetime.strptime(day_str, "%Y-%m-%d")
+            datetime.strptime(day_str, "%Y-%m-%d")
         except ValueError:
             continue
-        if cutoff is not None and d + timedelta(days=1) < cutoff:
+        days.append(day_str)
+    days.sort()
+    return days
+
+
+def read_history_days(host_dir, day_strs):
+    records = []
+    latest_time = None
+    for day_str in day_strs:
+        path = os.path.join(host_dir, f"{day_str}.jsonl")
+        if not os.path.exists(path):
             continue
-        path = os.path.join(host_dir, fname)
         try:
             with open(path) as f:
                 for line in f:
@@ -145,36 +164,54 @@ def read_history_files(host_dir, hours_limit=None):
                         lat = float(parsed[2]) if len(parsed) > 2 else (-1.0 if not s else 0.0)
                     except Exception:
                         continue
-                    if cutoff is not None and t < cutoff:
-                        continue
                     records.append((t, s, lat))
                     if latest_time is None or t > latest_time:
                         latest_time = t
         except Exception as e:
             print(f"Error reading {path}: {e}")
-
     records.sort(key=lambda x: x[0])
     return records, latest_time
 
 
-class HistoryLoadWorker(QRunnable):
-    """Фоновая загрузка полной истории для всех хостов."""
+def _days_between(start_dt, end_dt):
+    days = set()
+    d = start_dt.date()
+    last = end_dt.date()
+    while d <= last:
+        days.add(d.strftime("%Y-%m-%d"))
+        d += timedelta(days=1)
+    return days
 
-    def __init__(self, host_dirs, retention_hours):
+
+class _DayLoadSignals(QObject):
+    finished = pyqtSignal(dict)
+
+
+class DayLoadWorker(QRunnable):
+    def __init__(self, host_dirs, host_days):
         super().__init__()
-        self.host_dirs = dict(host_dirs)         # {host: host_dir}
-        self.retention_hours = retention_hours
-        self.signals = _LoadSignals()
+        self.host_dirs = dict(host_dirs)
+        self.host_days = {h: list(d) for h, d in host_days.items()}
+        self.signals = _DayLoadSignals()
 
     @pyqtSlot()
     def run(self):
         result = {}
         for host, hd in self.host_dirs.items():
-            records, latest = read_history_files(hd, hours_limit=self.retention_hours)
-            result[host] = {'records': records, 'latest_time': latest}
-        self.signals.finished.emit(result)
+            days = self.host_days.get(host, [])
+            records, latest = read_history_days(hd, days)
+            result[host] = {
+                'days_loaded': days,
+                'records': records,
+                'latest_time': latest,
+            }
+        try:
+            self.signals.finished.emit(result)
+        except RuntimeError:
+            pass
 
-# ---------- Главное окно ----------
+
+# ---------- Main window ----------
 
 class PingMonitor(QMainWindow):
     def __init__(self):
@@ -184,7 +221,23 @@ class PingMonitor(QMainWindow):
         os.makedirs(HOOKS_DIR_DEFAULT, exist_ok=True)
 
         self.settings = QSettings("QPing", "QPing")
-        self._migrate_history_if_needed()
+
+        # --- Theme and appearance ---
+        self.appearance = self.settings.value("appearance", "auto")
+        self.graph_show_latency = read_bool_setting(self.settings, "graph_show_latency", True)
+        self.graph_height_mode = self.settings.value("graph_height_mode", "normal")
+        if self.graph_height_mode not in ("compact", "normal", "expanded"):
+            self.graph_height_mode = "normal"
+        self._resolved_theme = apply_theme(QApplication.instance(), self.appearance)
+
+        self._color_scheme_hooked = False
+        try:
+            sh = QApplication.instance().styleHints()
+            if hasattr(sh, "colorSchemeChanged"):
+                sh.colorSchemeChanged.connect(self._on_color_scheme_changed)
+                self._color_scheme_hooked = True
+        except Exception:
+            pass
 
         self.language = self.settings.value("language", "ru")
         self._ = setup_localization(self.language)
@@ -194,7 +247,11 @@ class PingMonitor(QMainWindow):
         self.app_start_time = datetime.now()
         self.notifications_enabled = read_bool_setting(self.settings, "notifications_enabled", True)
         self.is_quitting = False
-        self.filter_failed = read_bool_setting(self.settings, "filter_failed", False)
+        # filter_mode: 'all' | 'failed' | 'warn' | 'disabled'
+        self.filter_mode = self.settings.value("filter_mode", None)
+        if self.filter_mode not in ("all", "failed", "warn", "disabled"):
+            self.filter_mode = "failed" if read_bool_setting(
+                self.settings, "filter_failed", False) else "all"
         self.minimize_on_escape = read_bool_setting(self.settings, "minimize_on_escape", True)
 
         self.retention_hours = max(1, read_int_setting(self.settings, "retention_hours", 48))
@@ -211,6 +268,7 @@ class PingMonitor(QMainWindow):
         os.makedirs(self.hooks_dir, exist_ok=True)
 
         self.fping_batch_size = max(1, read_int_setting(self.settings, "fping_batch_size", 5))
+        self.ping_timeout_ms = max(0, read_int_setting(self.settings, "ping_timeout_ms", 0))
 
         self.search_text = ""
 
@@ -229,7 +287,14 @@ class PingMonitor(QMainWindow):
         self.tray_icon.setVisible(True)
         self.tray_icon.activated.connect(self.tray_icon_activated)
 
-        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowMinimizeButtonHint | Qt.WindowType.WindowCloseButtonHint)
+        self.setWindowFlags(
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowTitleHint
+            | Qt.WindowType.WindowSystemMenuHint
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+            | Qt.WindowType.WindowCloseButtonHint
+        )
 
         self.host_widgets = {}
         self.host_check_types = {}
@@ -240,11 +305,15 @@ class PingMonitor(QMainWindow):
         self.icmp_idx = 0
         self.tcp_idx = 0
         self._highlighted_hosts = []
+        self._focused_host = None
 
         self.parking_widget = QWidget()
         self.parking_widget.hide()
 
         self.time_scale = TimeScaleWidget(self)
+        self.time_scale.set_left_gutter(
+            PingGraphWidget.LEFT_GUTTER if self.graph_show_latency else 0
+        )
         self.time_scale.zoom_changed.connect(self.update_all_graphs)
         self.time_scale.zoom_changed.connect(self.on_zoom_changed)
 
@@ -258,6 +327,7 @@ class PingMonitor(QMainWindow):
         self.host_list.itemDoubleClicked.connect(self.scroll_to_host_widget)
         self.host_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.host_list.customContextMenuRequested.connect(self.show_host_context_menu)
+        self.host_list.itemSelectionChanged.connect(self._on_host_selection_changed)
         self.host_list.model().rowsMoved.connect(self.handle_host_moved)
 
         self.scroll_area = QScrollArea()
@@ -271,10 +341,20 @@ class PingMonitor(QMainWindow):
         self.hook_pool.setMaxThreadCount(2)
 
         self._save_in_progress = False
-        self._history_fully_loaded = False
+        self._save_workers = set()
         self._history_loading_in_progress = False
+        self._pending_days = {}
 
-        self.ping_manager = PingManager(saved_interval, self.thread_pool)
+        # --- Notifications: group within a 2-second window ---
+        self._notify_queue = []
+        self._notify_timer = QTimer(self)
+        self._notify_timer.setSingleShot(True)
+        self._notify_timer.setInterval(2000)
+        self._notify_timer.timeout.connect(self._flush_notifications)
+
+        self._icon_cache = {}
+
+        self.ping_manager = PingManager(saved_interval, self.thread_pool, self.ping_timeout_ms)
         self.ping_manager.ping_result.connect(self.handle_ping_result)
 
         self.ping_timer = QTimer()
@@ -293,7 +373,6 @@ class PingMonitor(QMainWindow):
         self.cleanup_timer.start(24 * 60 * 60 * 1000)
 
         self.setup_ui()
-        # Окно показывается сразу, данные догружаются после запуска event-loop.
         QTimer.singleShot(0, self.load_data)
         self.interval_slider.setValue(saved_interval)
         self.update_interval(saved_interval)
@@ -302,14 +381,79 @@ class PingMonitor(QMainWindow):
         if self.cleanup_enabled:
             QTimer.singleShot(5000, self.run_auto_cleanup)
 
-    # ---------- Клавиши ----------
+    # ---------- Theme ----------
+
+    def _apply_summary_styles(self):
+        p = palette()
+        self.lbl_ok.setStyleSheet(f"color: {p.color_ok.name()}; font-weight: bold;")
+        self.lbl_engine.setStyleSheet(f"color: {p.text_dim.name()};")
+
+        warn_style = f"color: {p.color_warn.name()}; font-weight: bold;"
+        if self.filter_mode == "warn":
+            warn_style += " text-decoration: underline;"
+        self.lbl_warn.setStyleSheet(warn_style)
+
+        down_style = f"color: {p.color_down.name()}; font-weight: bold;"
+        if self.filter_mode == "failed":
+            down_style += " text-decoration: underline;"
+        self.lbl_down.setStyleSheet(down_style)
+
+        disabled_style = f"color: {p.text_disabled.name()};"
+        if self.filter_mode == "disabled":
+            disabled_style += " text-decoration: underline;"
+        self.lbl_disabled.setStyleSheet(disabled_style)
+
+        for lbl in (self.lbl_warn, self.lbl_down, self.lbl_disabled):
+            lbl.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def _recolor_tree(self):
+        """Recolor the tree without a full rebuild (preserves selection).
+        Updates both the category backgrounds and the background/text of all
+        hosts to match the current palette."""
+        p = palette()
+        highlighted = set(self._highlighted_hosts)
+        for i in range(self.host_list.topLevelItemCount()):
+            ci = self.host_list.topLevelItem(i)
+            ci.setBackground(0, p.category_bg)
+            for j in range(ci.childCount()):
+                hi = ci.child(j)
+                host = hi.data(0, Qt.ItemDataRole.UserRole)
+                hi.setBackground(0, p.highlight_bg if host in highlighted else p.clear_bg)
+                w = self.host_widgets.get(host)
+                if w:
+                    hi.setForeground(0, self._host_color(w))
+
+    def apply_appearance(self, name):
+        self.appearance = name
+        self._resolved_theme = apply_theme(QApplication.instance(), name)
+        self.settings.setValue("appearance", name)
+        self._apply_summary_styles()
+        self._recolor_tree()
+        for w in self.host_widgets.values():
+            w.update_host_label()
+            w.graph_widget.update()
+        self.update_all_graphs()
+
+    def apply_graph_height(self, mode):
+        """Set and persist the graph height mode for all graphs."""
+        if mode not in ("compact", "normal", "expanded"):
+            mode = "normal"
+        self.graph_height_mode = mode
+        self.settings.setValue("graph_height_mode", mode)
+        for w in self.host_widgets.values():
+            w.graph_widget.set_graph_height_mode(mode)
+
+    def _on_color_scheme_changed(self, _scheme):
+        if self.appearance == "auto":
+            self.apply_appearance("auto")
+
+    # ---------- Keyboard ----------
 
     def keyPressEvent(self, event):
         key = event.key()
         mods = event.modifiers()
         if key == Qt.Key.Key_Escape:
             fw = QApplication.focusWidget()
-            # Если фокус в текстовом поле и там есть текст — очищаем поле
             if isinstance(fw, QLineEdit) and fw.text():
                 fw.clear()
                 event.accept()
@@ -324,6 +468,17 @@ class PingMonitor(QMainWindow):
             return
         if key == Qt.Key.Key_F2:
             self._on_f2_shortcut()
+            event.accept()
+            return
+        if key == Qt.Key.Key_F and (mods & Qt.KeyboardModifier.ControlModifier):
+            self.search_input.setFocus()
+            self.search_input.selectAll()
+            event.accept()
+            return
+        if key == Qt.Key.Key_R and (mods & Qt.KeyboardModifier.ControlModifier):
+            order = ["compact", "normal", "expanded"]
+            i = order.index(self.graph_height_mode) if self.graph_height_mode in order else 1
+            self.apply_graph_height(order[(i + 1) % len(order)])
             event.accept()
             return
         if key == Qt.Key.Key_N and (mods & Qt.KeyboardModifier.ControlModifier):
@@ -344,49 +499,22 @@ class PingMonitor(QMainWindow):
         if len(sel) == 1:
             self.edit_host(sel[0].data(0, Qt.ItemDataRole.UserRole))
 
-    # ---------- Миграция ----------
-
-    def _migrate_history_if_needed(self):
-        if not os.path.exists(OLD_HISTORY_FILE):
-            return
-        try:
-            with open(OLD_HISTORY_FILE, 'r') as f:
-                old_hist = json.load(f)
-            for host, data in old_hist.items():
-                host_dir = os.path.join(HISTORY_DIR, host_safe_name(host))
-                os.makedirs(host_dir, exist_ok=True)
-                meta = {"host": host,
-                        "check_type": data.get('check_type', {'type': 'icmp', 'port': None})}
-                with open(os.path.join(host_dir, "meta.json"), 'w') as mf:
-                    json.dump(meta, mf, indent=2)
-                by_day = {}
-                for item in data.get('records', []):
-                    try:
-                        t = datetime.fromisoformat(item[0])
-                        s = bool(item[1])
-                        lat = float(item[2]) if len(item) > 2 else (-1.0 if not s else 0.0)
-                    except Exception:
-                        continue
-                    key = t.strftime("%Y-%m-%d")
-                    by_day.setdefault(key, []).append((t, s, lat))
-                for day, recs in by_day.items():
-                    path = os.path.join(host_dir, f"{day}.jsonl")
-                    with open(path, 'w') as jf:
-                        for t, s, lat in recs:
-                            jf.write(json.dumps([t.isoformat(), s, lat]) + "\n")
-            try:
-                os.rename(OLD_HISTORY_FILE, OLD_HISTORY_FILE + ".migrated")
-            except OSError:
-                pass
-            print(f"[migrate] History migrated from {OLD_HISTORY_FILE}")
-        except Exception as e:
-            print(f"[migrate] History migration failed: {e}")
+    # ---------- Paths / icon ----------
 
     def _host_dir(self, host):
         return os.path.join(HISTORY_DIR, host_safe_name(host))
 
+    def _make_host_widget(self, host, category):
+        """Create a HostWidget with the current settings applied."""
+        w = HostWidget(host, self.time_scale, self.app_start_time, category)
+        w.retention_hours = self.retention_hours
+        w.graph_widget.set_show_latency(self.graph_show_latency)
+        w.graph_widget.set_check_interval(self.interval_slider.value())
+        w.graph_widget.set_graph_height_mode(self.graph_height_mode)
+        w.context_menu_requested.connect(self._on_host_context_menu_from_graph)
+        return w
+
     def create_icon(self, color):
-        """Иконка трея: через QPainter."""
         icon = QIcon()
         for size in (16, 22, 24, 32, 48, 64, 128, 256):
             pixmap = QPixmap(size, size)
@@ -408,7 +536,7 @@ class PingMonitor(QMainWindow):
             icon.addPixmap(pixmap)
         return icon
 
-    # ---------- Окно ----------
+    # ---------- Window ----------
 
     def quit_application(self):
         self.is_quitting = True
@@ -436,16 +564,16 @@ class PingMonitor(QMainWindow):
         self.activateWindow()
 
     def tray_icon_activated(self, reason):
-        # На разных DE приходит либо Trigger (одиночный клик), либо DoubleClick.
         if reason in (QSystemTrayIcon.ActivationReason.DoubleClick,
                       QSystemTrayIcon.ActivationReason.Trigger):
             self.restore_window()
 
-    # ---------- Навигация / drag ----------
+    # ---------- Navigation / drag ----------
 
     def scroll_to_host_widget(self, item, column):
         host = item.data(0, Qt.ItemDataRole.UserRole)
         if host and host in self.host_widgets:
+            self._focused_host = host
             widget = self.host_widgets[host]
             self.scroll_area.ensureWidgetVisible(widget)
             self.start_highlight_animation(widget)
@@ -472,7 +600,6 @@ class PingMonitor(QMainWindow):
         QTimer.singleShot(0, self._finalize_host_moved)
 
     def _finalize_host_moved(self):
-        # 1. Обновляем категории.
         for i in range(self.host_list.topLevelItemCount()):
             cat_item = self.host_list.topLevelItem(i)
             cat_name = cat_item.data(0, Qt.ItemDataRole.UserRole)
@@ -482,7 +609,6 @@ class PingMonitor(QMainWindow):
                 if host_name in self.host_widgets:
                     self.host_widgets[host_name].category = cat_name
 
-        # 2. Пересобираем self.host_widgets в порядке дерева.
         new_order = {}
         for i in range(self.host_list.topLevelItemCount()):
             cat_item = self.host_list.topLevelItem(i)
@@ -501,7 +627,78 @@ class PingMonitor(QMainWindow):
         self.save_data()
         self.apply_filter()
 
-    # ---------- Раскладка ----------
+    def _update_tree_width(self):
+        """Lock the hosts panel width to the longest string + padding.
+        QFontMetrics and sizeHintForColumn(0) underestimate the actual text
+        width on some fonts/DPI, so we add 15% + 12 px."""
+        fm = self.host_list.fontMetrics()
+
+        # Temporarily show all items so the width does not jump while filtering.
+        hidden_cats, hidden_items = [], []
+        for i in range(self.host_list.topLevelItemCount()):
+            ci = self.host_list.topLevelItem(i)
+            if ci.isHidden():
+                hidden_cats.append(ci)
+                ci.setHidden(False)
+            for j in range(ci.childCount()):
+                hi = ci.child(j)
+                if hi.isHidden():
+                    hidden_items.append(hi)
+                    hi.setHidden(False)
+
+        try:
+            # Manual measurement per row
+            max_text_w = 0
+            for i in range(self.host_list.topLevelItemCount()):
+                ci = self.host_list.topLevelItem(i)
+                max_text_w = max(max_text_w, fm.horizontalAdvance(ci.text(0)))
+                for j in range(ci.childCount()):
+                    hi = ci.child(j)
+                    max_text_w = max(max_text_w, fm.horizontalAdvance(hi.text(0)))
+
+            hint_w = self.host_list.sizeHintForColumn(0)
+        finally:
+            for ci in hidden_cats:
+                ci.setHidden(True)
+            for hi in hidden_items:
+                hi.setHidden(True)
+
+        if max_text_w <= 0:
+            max_text_w = fm.horizontalAdvance("example.com [p:65535]")
+
+        # QFontMetrics underestimates: +15% and at least +12 px.
+        # Take the maximum of three estimates so it's always enough.
+        safe_text_w = max(
+            int(max_text_w * 1.15) + 12,
+            hint_w,
+            max_text_w + 20,
+        )
+
+        indent = self.host_list.indentation()      # indent for children
+        icon = 18                                   # expansion icon
+        delegate_pad = 8                            # delegate padding
+        item_area = safe_text_w + indent + icon + delegate_pad
+
+        scrollbar = self.host_list.style().pixelMetric(QStyle.PixelMetric.PM_ScrollBarExtent)
+        frame = 2 * self.host_list.frameWidth()
+        extra = 5
+
+        tree_w = item_area + scrollbar + frame + extra
+
+        # Minimum width — enough for the search box and both "+"/"−" buttons
+        search_min = (self.search_input.minimumSizeHint().width()
+                      + self.expand_all_btn.width()
+                      + self.collapse_all_btn.width()
+                      + 20)
+        total = max(tree_w, search_min)
+
+        # Upper bound — no more than 45% of the window width to save room for graphs
+        if self.width() > 0:
+            total = min(total, int(self.width() * 0.45))
+
+        self.left_panel.setFixedWidth(total)
+
+    # ---------- Layout ----------
 
     def add_category_separator(self, category):
         sep = QFrame()
@@ -526,8 +723,20 @@ class PingMonitor(QMainWindow):
         for category in self.sorted_categories():
             cat_widgets = [w for w in self.host_widgets.values() if w.category == category]
             has_visible = False
-            if self.filter_failed:
-                has_visible = any((len(w.ping_history) > 0 and not w.ping_history[-1][1]) for w in cat_widgets)
+            if self.filter_mode == "failed":
+                has_visible = any(
+                    (w.consecutive_failures >= self.alerts_after_failures)
+                    for w in cat_widgets if not w.disabled
+                )
+            elif self.filter_mode == "warn":
+                has_visible = any(
+                    (1 <= w.consecutive_failures < self.alerts_after_failures)
+                    for w in cat_widgets if not w.disabled
+                )
+            elif self.filter_mode == "disabled":
+                has_visible = any(
+                    (w.disabled or w.muted) for w in cat_widgets
+                )
             else:
                 has_visible = True
             if not has_visible:
@@ -540,11 +749,11 @@ class PingMonitor(QMainWindow):
                     host = child.data(0, Qt.ItemDataRole.UserRole)
                     if host and host in self.host_widgets and self.host_widgets[host].category == category:
                         w = self.host_widgets[host]
-                        if self.filter_failed:
-                            if len(w.ping_history) > 0 and not w.ping_history[-1][1]:
-                                self.right_panel_layout.addWidget(w)
-                        else:
+                        if self.filter_mode == "all":
                             self.right_panel_layout.addWidget(w)
+                        else:
+                            if self._host_should_show(w, host):
+                                self.right_panel_layout.addWidget(w)
             for i in range(self.host_list.topLevelItemCount()):
                 ci = self.host_list.topLevelItem(i)
                 if ci.data(0, Qt.ItemDataRole.UserRole) == category:
@@ -571,7 +780,6 @@ class PingMonitor(QMainWindow):
 
         menu_bar = self.menuBar()
 
-        # --- Application ---
         self.menu_app = menu_bar.addMenu(self._("Application"))
 
         self.action_settings = QAction(self._("Settings..."), self)
@@ -606,14 +814,26 @@ class PingMonitor(QMainWindow):
         self.action_help.triggered.connect(self.show_help)
         self.menu_help.addAction(self.action_help)
 
+        self.action_about = QAction(self._("About"), self)
+        self.action_about.triggered.connect(self.show_about)
+        self.menu_help.addAction(self.action_about)
+
         # --- Language ---
+        # The language list is built automatically from
+        # translations/<code>/LC_MESSAGES/qping.mo.
+        # To add a new language, just drop the compiled .mo file in place.
         self.menu_lang = menu_bar.addMenu(self._("Language"))
-        self.action_lang_ru = QAction("Русский", self)
-        self.action_lang_ru.triggered.connect(lambda: self.change_language("ru"))
-        self.menu_lang.addAction(self.action_lang_ru)
-        self.action_lang_en = QAction("English", self)
-        self.action_lang_en.triggered.connect(lambda: self.change_language("en"))
-        self.menu_lang.addAction(self.action_lang_en)
+        self._lang_actions = {}                      # {code: QAction}
+        self._lang_group = QActionGroup(self)
+        self._lang_group.setExclusive(True)
+        for code, display in discover_languages():
+            a = QAction(display, self)
+            a.setCheckable(True)
+            a.setChecked(code == self.language)
+            a.triggered.connect(lambda _checked=False, c=code: self.change_language(c))
+            self._lang_group.addAction(a)
+            self.menu_lang.addAction(a)
+            self._lang_actions[code] = a
 
         # --- Tray menu ---
         self.tray_menu = QMenu()
@@ -645,11 +865,10 @@ class PingMonitor(QMainWindow):
             else self._("Notifications: Off")
         )
         self.mute_button.clicked.connect(self.toggle_notifications)
-        self.filter_button = QPushButton(
-            self._("Show Failed Hosts") if not self.filter_failed
-            else self._("Show All Hosts")
-        )
+        self.filter_button = QPushButton()
+        self.filter_button.setToolTip(self._("Cycle filter: All → Failed → Warn"))
         self.filter_button.clicked.connect(self.toggle_filter)
+        self._update_filter_button_text()
         self.interval_caption = QLabel(self._("Interval:"))
         cl.addWidget(self.host_input)
         cl.addWidget(self.add_button)
@@ -667,25 +886,33 @@ class PingMonitor(QMainWindow):
         sl.setContentsMargins(6, 2, 6, 2)
         summary_panel.setLayout(sl)
         self.lbl_total = QLabel("Total: 0")
-        self.lbl_ok = QLabel("OK: 0"); self.lbl_ok.setStyleSheet("color: #2E7D32; font-weight: bold;")
-        self.lbl_warn = QLabel("Warn: 0"); self.lbl_warn.setStyleSheet("color: #F9A825; font-weight: bold;")
-        self.lbl_down = QLabel("Down: 0"); self.lbl_down.setStyleSheet("color: #C62828; font-weight: bold;")
-        self.lbl_disabled = QLabel("Disabled: 0"); self.lbl_disabled.setStyleSheet("color: gray;")
+        self.lbl_ok = QLabel("OK: 0")
+        self.lbl_warn = ClickableLabel("Warn: 0")
+        self.lbl_warn.setToolTip(self._("Click to show only warning hosts"))
+        self.lbl_warn.clicked.connect(lambda: self.toggle_summary_filter("warn"))
+        self.lbl_down = ClickableLabel("Down: 0")
+        self.lbl_down.setToolTip(self._("Click to show only down hosts"))
+        self.lbl_down.clicked.connect(lambda: self.toggle_summary_filter("failed"))
+        self.lbl_disabled = ClickableLabel("Disabled: 0")
+        self.lbl_disabled.setToolTip(self._("Click to show disabled and muted hosts"))
+        self.lbl_disabled.clicked.connect(lambda: self.toggle_summary_filter("disabled"))
         self.lbl_loss = QLabel("Loss: 0.0%")
         if has_fping():
             self.lbl_engine = QLabel(f"Engine: fping (batch {self.fping_batch_size})")
         else:
             self.lbl_engine = QLabel("Engine: ping")
-        self.lbl_engine.setStyleSheet("color: #666;")
-        for w in (self.lbl_total, self.lbl_ok, self.lbl_warn, self.lbl_down, self.lbl_disabled, self.lbl_loss):
+        for w in (self.lbl_total, self.lbl_ok, self.lbl_warn, self.lbl_down,
+                  self.lbl_disabled, self.lbl_loss):
             sl.addWidget(w)
             sl.addWidget(QLabel("|"))
         sl.addWidget(self.lbl_engine)
         sl.addStretch()
+        self._apply_summary_styles()
 
         main_panel = QHBoxLayout()
 
         left = QWidget()
+        self.left_panel = left
         ll = QVBoxLayout()
         left.setLayout(ll)
         self.hosts_caption = QLabel(self._("Monitored Hosts:"))
@@ -726,18 +953,80 @@ class PingMonitor(QMainWindow):
         scroll_content.setLayout(self.right_panel_layout)
         self.scroll_area.setWidget(scroll_content)
 
-        main_panel.addWidget(left, 25)
-        main_panel.addWidget(right, 75)
+        main_panel.addWidget(left, 0)
+        main_panel.addWidget(right, 1)
 
         layout.addWidget(control_panel)
         layout.addWidget(summary_panel)
         layout.addLayout(main_panel)
 
-    # ---------- Поиск ----------
+    # ---------- Search ----------
 
     def on_search_changed(self, text):
         self.search_text = text.strip().lower()
         self.apply_filter()
+        if self.search_text:
+            self._select_first_visible_host()
+        else:
+            self._restore_focus_after_search_clear()
+
+    def _on_host_selection_changed(self):
+        sel = [i for i in self.host_list.selectedItems() if i.parent() is not None]
+        if sel:
+            host = sel[0].data(0, Qt.ItemDataRole.UserRole)
+            if host:
+                self._focused_host = host
+
+    def _restore_focus_after_search_clear(self):
+        if not self._focused_host or self._focused_host not in self.host_widgets:
+            return
+        host = self._focused_host
+        w = self.host_widgets[host]
+        self._select_host_in_tree(host)
+        if w.isVisible():
+            QTimer.singleShot(0, lambda: self.scroll_area.ensureWidgetVisible(w))
+
+    def _select_first_visible_host(self):
+        selected = self.host_list.selectedItems()
+        still_visible = [
+            it for it in selected
+            if it.parent() is not None and not it.isHidden()
+        ]
+        if still_visible:
+            return
+        for i in range(self.host_list.topLevelItemCount()):
+            ci = self.host_list.topLevelItem(i)
+            if ci.isHidden():
+                continue
+            for j in range(ci.childCount()):
+                hi = ci.child(j)
+                if hi.isHidden():
+                    continue
+                ci.setExpanded(True)
+                self.host_list.clearSelection()
+                hi.setSelected(True)
+                self.host_list.setCurrentItem(hi)
+                self.host_list.scrollToItem(hi)
+                host = hi.data(0, Qt.ItemDataRole.UserRole)
+                if host:
+                    self._focused_host = host
+                return
+
+    def _select_host_in_tree(self, host):
+        if not host:
+            return
+        for i in range(self.host_list.topLevelItemCount()):
+            ci = self.host_list.topLevelItem(i)
+            for j in range(ci.childCount()):
+                hi = ci.child(j)
+                if hi.data(0, Qt.ItemDataRole.UserRole) == host:
+                    ci.setExpanded(True)
+                    self.host_list.clearSelection()
+                    hi.setSelected(True)
+                    self.host_list.setCurrentItem(hi)
+                    self.host_list.scrollToItem(hi)
+                    self._focused_host = host
+                    return
 
     def expand_all_groups(self):
         for i in range(self.host_list.topLevelItemCount()):
@@ -750,22 +1039,27 @@ class PingMonitor(QMainWindow):
     def _host_should_show(self, widget, host):
         if self.search_text and self.search_text not in host.lower():
             return False
+        if self.filter_mode == "disabled":
+            return widget.disabled or widget.muted
         if widget.disabled:
-            return not self.filter_failed
-        if self.filter_failed:
-            return len(widget.ping_history) > 0 and not widget.ping_history[-1][1]
+            return self.filter_mode == "all"
+        if self.filter_mode == "failed":
+            return widget.consecutive_failures >= self.alerts_after_failures
+        if self.filter_mode == "warn":
+            return 1 <= widget.consecutive_failures < self.alerts_after_failures
         return True
 
-    # ---------- Сводка ----------
+    # ---------- Summary ----------
 
     def update_status_panel(self):
         total = len(self.host_widgets)
-        ok = warn = down = disabled = 0
+        ok = warn = down = inactive = 0
         tot_ok = tot_fail = 0
         for w in self.host_widgets.values():
-            if w.disabled:
-                disabled += 1
-                continue
+            if w.disabled or w.muted:
+                inactive += 1
+                if w.disabled:
+                    continue
             cf = w.consecutive_failures
             if cf >= self.alerts_after_failures:
                 down += 1
@@ -781,20 +1075,32 @@ class PingMonitor(QMainWindow):
         self.lbl_ok.setText(f"OK: {ok}")
         self.lbl_warn.setText(f"Warn: {warn}")
         self.lbl_down.setText(f"Down: {down}")
-        self.lbl_disabled.setText(f"Disabled: {disabled}")
+        self.lbl_disabled.setText(f"Disabled: {inactive}")
         self.lbl_loss.setText(f"Loss: {loss:.1f}%")
+        self._apply_summary_styles()
 
-    # ---------- Настройки ----------
+    # ---------- Settings ----------
 
     def show_settings_dialog(self):
         dialog = QDialog(self)
         dialog.setWindowTitle(self._("Settings"))
-        dialog.resize(520, 460)
+        dialog.resize(520, 620)
         layout = QVBoxLayout(dialog)
         tabs = QTabWidget()
 
         general = QWidget()
         gl = QFormLayout(general)
+
+        # --- Appearance ---
+        appearance_combo = QComboBox()
+        appearance_combo.addItem(self._("Auto (follow system)"), "auto")
+        appearance_combo.addItem(self._("Light"), "light")
+        appearance_combo.addItem(self._("Dark"), "dark")
+        idx = appearance_combo.findData(self.appearance)
+        if idx >= 0:
+            appearance_combo.setCurrentIndex(idx)
+        gl.addRow(self._("Appearance:"), appearance_combo)
+
         retention_spin = QSpinBox(); retention_spin.setRange(1, 365 * 24)
         if self.retention_hours % 24 == 0 and self.retention_hours >= 24:
             retention_spin.setValue(self.retention_hours // 24); unit_init = 1
@@ -805,9 +1111,18 @@ class PingMonitor(QMainWindow):
         row = QWidget(); rl = QHBoxLayout(); rl.setContentsMargins(0, 0, 0, 0)
         rl.addWidget(retention_spin, 1); rl.addWidget(retention_unit, 1); row.setLayout(rl)
         gl.addRow(self._("Keep history for:"), row)
+
         esc_check = QCheckBox(self._("Minimize to tray on Escape"))
         esc_check.setChecked(self.minimize_on_escape)
         gl.addRow("", esc_check)
+
+        timeout_spin = QSpinBox()
+        timeout_spin.setRange(0, 60000)
+        timeout_spin.setSingleStep(100)
+        timeout_spin.setSuffix(" ms")
+        timeout_spin.setValue(self.ping_timeout_ms)
+        timeout_spin.setSpecialValueText(self._("Auto (follows interval)"))
+        gl.addRow(self._("Response timeout:"), timeout_spin)
 
         batch_spin = QSpinBox()
         batch_spin.setRange(1, 100)
@@ -816,8 +1131,22 @@ class PingMonitor(QMainWindow):
         gl.addRow(self._("fping batch size (hosts per call):"), batch_spin)
         if not has_fping():
             fping_hint = QLabel(self._("fping not found — batch size has no effect."))
-            fping_hint.setStyleSheet("color: #666; font-size: 10px;")
+            fping_hint.setStyleSheet(f"color: {palette().text_dim.name()}; font-size: 10px;")
             gl.addRow("", fping_hint)
+
+        latency_check = QCheckBox(self._("Show latency scale on graphs"))
+        latency_check.setChecked(self.graph_show_latency)
+        gl.addRow("", latency_check)
+
+        height_combo = QComboBox()
+        height_combo.addItem(self._("Compact (50px)"), "compact")
+        height_combo.addItem(self._("Normal (80px)"), "normal")
+        height_combo.addItem(self._("Expanded (200px)"), "expanded")
+        idx = height_combo.findData(self.graph_height_mode)
+        if idx >= 0:
+            height_combo.setCurrentIndex(idx)
+        gl.addRow(self._("Graph height:"), height_combo)
+
         tabs.addTab(general, self._("General"))
 
         alerts = QWidget()
@@ -844,7 +1173,8 @@ class PingMonitor(QMainWindow):
         cleanup_days.setSuffix(" days")
         st.addRow(self._("Delete archives older than:"), cleanup_days)
         info = QLabel(self._("Files are deleted from ~/.config/QPing/history/. This cannot be undone."))
-        info.setWordWrap(True); info.setStyleSheet("color: #666; font-size: 10px;")
+        info.setWordWrap(True)
+        info.setStyleSheet(f"color: {palette().text_dim.name()}; font-size: 10px;")
         st.addRow(info)
         tabs.addTab(storage, self._("Storage"))
 
@@ -855,7 +1185,7 @@ class PingMonitor(QMainWindow):
         hl.addRow("", hooks_check)
         hooks_path_lbl = QLabel(self.hooks_dir)
         hooks_path_lbl.setWordWrap(True)
-        hooks_path_lbl.setStyleSheet("color: #666;")
+        hooks_path_lbl.setStyleSheet(f"color: {palette().text_dim.name()};")
         choose_btn = QPushButton(self._("Choose directory..."))
         def choose_hooks_dir():
             d = QFileDialog.getExistingDirectory(self, self._("Hooks directory"), self.hooks_dir)
@@ -868,7 +1198,8 @@ class PingMonitor(QMainWindow):
             "Scripts: on_host_down.sh and on_host_up.sh (must be executable).\n"
             "Environment variables: QPING_HOST, QPING_STATUS (down/up), QPING_FAILURES, QPING_TIMESTAMP."
         ))
-        hint.setWordWrap(True); hint.setStyleSheet("color: #666; font-size: 10px;")
+        hint.setWordWrap(True)
+        hint.setStyleSheet(f"color: {palette().text_dim.name()}; font-size: 10px;")
         hl.addRow(hint)
         tabs.addTab(hooks, self._("Hooks"))
 
@@ -879,6 +1210,27 @@ class PingMonitor(QMainWindow):
         layout.addWidget(buttons)
 
         if dialog.exec() == QDialog.DialogCode.Accepted:
+            # --- Appearance ---
+            new_appearance = appearance_combo.currentData()
+            if new_appearance != self.appearance:
+                self.apply_appearance(new_appearance)
+
+            # --- Latency scale ---
+            new_latency = latency_check.isChecked()
+            if new_latency != self.graph_show_latency:
+                self.graph_show_latency = new_latency
+                self.settings.setValue("graph_show_latency", new_latency)
+                self.time_scale.set_left_gutter(
+                    PingGraphWidget.LEFT_GUTTER if new_latency else 0
+                )
+                for w in self.host_widgets.values():
+                    w.graph_widget.set_show_latency(new_latency)
+
+            # --- Graph height mode ---
+            new_height = height_combo.currentData()
+            if new_height != self.graph_height_mode:
+                self.apply_graph_height(new_height)
+
             value = retention_spin.value()
             new_hours = value * 24 if retention_unit.currentIndex() == 1 else value
             new_hours = max(1, new_hours)
@@ -890,6 +1242,10 @@ class PingMonitor(QMainWindow):
 
             self.minimize_on_escape = esc_check.isChecked()
             self.settings.setValue("minimize_on_escape", self.minimize_on_escape)
+
+            self.ping_timeout_ms = max(0, timeout_spin.value())
+            self.settings.setValue("ping_timeout_ms", self.ping_timeout_ms)
+            self.ping_manager.set_ping_timeout(self.ping_timeout_ms)
 
             new_batch = batch_spin.value()
             self.fping_batch_size = max(1, new_batch)
@@ -918,7 +1274,7 @@ class PingMonitor(QMainWindow):
             self.update_all_graphs()
             self.update_status_panel()
 
-    # ---------- Хуки ----------
+    # ---------- Hooks ----------
 
     def fire_hook(self, event, host, failures=0):
         if not self.hooks_enabled:
@@ -935,7 +1291,72 @@ class PingMonitor(QMainWindow):
         worker = HookWorker(script, env)
         self.hook_pool.start(worker)
 
-    # ---------- Автоочистка ----------
+    def _queue_notification(self, event, host, failures=0):
+        """Push an event onto the queue. The aggregate is shown 2 seconds
+        after the first event in the window (single-shot timer)."""
+        self._notify_queue.append({
+            "event": event,
+            "host": host,
+            "failures": failures,
+        })
+        if not self._notify_timer.isActive():
+            self._notify_timer.start()
+
+    def _flush_notifications(self):
+        if not self._notify_queue:
+            return
+        queue = self._notify_queue
+        self._notify_queue = []
+
+        # Unique hosts, preserving order
+        def _uniq(seq):
+            seen = set()
+            out = []
+            for x in seq:
+                if x not in seen:
+                    seen.add(x)
+                    out.append(x)
+            return out
+
+        down_hosts = _uniq([n["host"] for n in queue if n["event"] == "down"])
+        up_hosts = _uniq([n["host"] for n in queue if n["event"] == "up"])
+
+        if not self.notifications_enabled:
+            return
+
+        if not self.tray_icon.isVisible():
+            self.tray_icon.setVisible(True)
+
+        def _preview(lst, limit=5):
+            if len(lst) <= limit:
+                return ", ".join(lst)
+            return ", ".join(lst[:limit]) + "…"
+
+        if down_hosts:
+            if len(down_hosts) == 1:
+                title = self._("Host unavailable")
+                text = self._("Host {} is not responding").format(down_hosts[0])
+            else:
+                title = self._("Hosts unavailable")
+                text = self._("{} hosts are not responding:\n{}").format(
+                    len(down_hosts), _preview(down_hosts))
+            self.tray_icon.showMessage(
+                title, text,
+                QSystemTrayIcon.MessageIcon.Warning, 5000)
+
+        if up_hosts:
+            if len(up_hosts) == 1:
+                title = self._("Host recovered")
+                text = self._("Host {} is responding again").format(up_hosts[0])
+            else:
+                title = self._("Hosts recovered")
+                text = self._("{} hosts are responding again:\n{}").format(
+                    len(up_hosts), _preview(up_hosts))
+            self.tray_icon.showMessage(
+                title, text,
+                QSystemTrayIcon.MessageIcon.Information, 5000)
+
+    # ---------- Auto-cleanup ----------
 
     def run_auto_cleanup(self):
         if not self.cleanup_enabled:
@@ -966,7 +1387,7 @@ class PingMonitor(QMainWindow):
         if removed:
             print(f"[cleanup] Removed {removed} old history files")
 
-    # ---------- Уведомления / фильтр ----------
+    # ---------- Notifications / filter ----------
 
     def toggle_notifications(self):
         self.notifications_enabled = not self.notifications_enabled
@@ -977,12 +1398,36 @@ class PingMonitor(QMainWindow):
         self.settings.setValue("notifications_enabled", self.notifications_enabled)
 
     def toggle_filter(self):
-        self.filter_failed = not self.filter_failed
-        self.filter_button.setText(
-            self._("Show Failed Hosts") if not self.filter_failed
-            else self._("Show All Hosts")
-        )
-        self.settings.setValue("filter_failed", self.filter_failed)
+        """Cycle through modes: all → failed → warn → disabled → all."""
+        order = ["all", "failed", "warn", "disabled"]
+        i = order.index(self.filter_mode) if self.filter_mode in order else 0
+        self.filter_mode = order[(i + 1) % len(order)]
+        self.settings.setValue("filter_mode", self.filter_mode)
+        self._update_filter_button_text()
+        self._apply_summary_styles()
+        self.apply_filter()
+        self.reorder_graphs()
+
+    def _update_filter_button_text(self):
+        labels = {
+            "all": self._("Filter: All"),
+            "failed": self._("Filter: Failed"),
+            "warn": self._("Filter: Warn"),
+            "disabled": self._("Filter: Disabled"),
+        }
+        if hasattr(self, "filter_button"):
+            self.filter_button.setText(labels.get(self.filter_mode, labels["all"]))
+
+    def toggle_summary_filter(self, mode):
+        """Click on Warn / Down / Disabled toggles the filter. A second click
+        on the active mode returns to 'all'."""
+        if self.filter_mode == mode:
+            self.filter_mode = "all"
+        else:
+            self.filter_mode = mode
+        self.settings.setValue("filter_mode", self.filter_mode)
+        self._update_filter_button_text()
+        self._apply_summary_styles()
         self.apply_filter()
         self.reorder_graphs()
 
@@ -1004,7 +1449,7 @@ class PingMonitor(QMainWindow):
                 if show:
                     visible += 1
             cat_name = ci.data(0, Qt.ItemDataRole.UserRole)
-            if self.filter_failed or self.search_text:
+            if self.filter_mode != "all" or self.search_text:
                 ci.setText(0, f"[{cat_name}] ({visible}/{total})")
                 ci.setHidden(visible == 0)
             else:
@@ -1030,13 +1475,122 @@ class PingMonitor(QMainWindow):
         dlg.setLayout(layout)
         dlg.exec()
 
-    # ---------- Локализация ----------
+    def _read_changelog(self):
+        """Return the changelog text.
+
+        Priority:
+          1. debian/changelog next to main.py — running from a source tree
+             (e.g. cloned from GitHub).
+          2. /usr/share/doc/qping/changelog.Debian.gz — Debian/PPA install.
+          3. /usr/share/doc/qping/changelog.gz — upstream changelog
+             shipped by the package.
+        Returns a string, or None if nothing is found.
+        """
+        local_changelog = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "debian", "changelog"
+        )
+        candidates = [
+            (local_changelog, False),
+            ("/usr/share/doc/qping/changelog.Debian.gz", True),
+            ("/usr/share/doc/qping/changelog.gz", True),
+        ]
+        for path, gz in candidates:
+            if not os.path.isfile(path):
+                continue
+            try:
+                if gz:
+                    with gzip.open(path, "rt", encoding="utf-8", errors="replace") as f:
+                        return f.read()
+                else:
+                    with open(path, "r", encoding="utf-8", errors="replace") as f:
+                        return f.read()
+            except Exception as e:
+                print(f"[about] Failed to read {path}: {e}")
+        return None
+
+    def show_about(self):
+        """Display the About dialog: version, author, project link, changelog."""
+        dlg = QDialog(self)
+        dlg.setWindowTitle(self._("About QPing"))
+        dlg.resize(640, 560)
+
+        outer = QVBoxLayout(dlg)
+
+        # --- Header: icon + name/version + author + link ---
+        header_row = QHBoxLayout()
+        icon_label = QLabel()
+        icon_pix = self.windowIcon().pixmap(64, 64)
+        icon_label.setPixmap(icon_pix)
+        icon_label.setFixedSize(64, 64)
+        header_row.addWidget(icon_label, 0, Qt.AlignmentFlag.AlignTop)
+
+        header_text = QWidget()
+        hl = QVBoxLayout(header_text)
+        hl.setContentsMargins(8, 0, 0, 0)
+        hl.setSpacing(2)
+
+        name_lbl = QLabel(f"<h2 style='margin:0;'>QPing {APP_VERSION}</h2>")
+        hl.addWidget(name_lbl)
+
+        subtitle_lbl = QLabel(self._("Network host monitor with ICMP ping and TCP port checks."))
+        subtitle_lbl.setWordWrap(True)
+        hl.addWidget(subtitle_lbl)
+
+        author_lbl = QLabel(self._("Author: {}").format("Sergei Parhomenko &lt;zersh@mail.ru&gt;"))
+        author_lbl.setTextFormat(Qt.TextFormat.RichText)
+        hl.addWidget(author_lbl)
+
+        link_lbl = QLabel(
+            f'<a href="https://github.com/zersh01/QPing">'
+            f'https://github.com/zersh01/QPing</a>'
+        )
+        link_lbl.setOpenExternalLinks(True)
+        link_lbl.setTextFormat(Qt.TextFormat.RichText)
+        hl.addWidget(link_lbl)
+
+        license_lbl = QLabel(self._("License: MIT"))
+        hl.addWidget(license_lbl)
+
+        hl.addStretch()
+        header_row.addWidget(header_text, 1)
+        outer.addLayout(header_row)
+
+        # --- Changelog ---
+        changelog_caption = QLabel(self._("Changelog:"))
+        changelog_caption.setStyleSheet("font-weight: bold; margin-top: 6px;")
+        outer.addWidget(changelog_caption)
+
+        changelog_view = QTextEdit()
+        changelog_view.setReadOnly(True)
+        changelog_view.setFont(QFont("Monospace", 9))
+        text = self._read_changelog()
+        if text:
+            changelog_view.setPlainText(text)
+        else:
+            changelog_view.setPlainText(
+                self._("Changelog is not available.\n\n"
+                       "When installed from a .deb package, the file is located at:\n"
+                       "  /usr/share/doc/qping/changelog.Debian.gz")
+            )
+        outer.addWidget(changelog_view, 1)
+
+        # --- Buttons ---
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
+        buttons.rejected.connect(dlg.reject)
+        buttons.accepted.connect(dlg.accept)
+        outer.addWidget(buttons)
+
+        dlg.exec()
+
+    # ---------- Localization ----------
 
     def change_language(self, lang):
         self.language = lang
         self._ = setup_localization(lang)
         self.settings.setValue("language", lang)
-        # Меню больше не пересоздаётся — можно вызывать напрямую.
+        if hasattr(self, "_lang_actions"):
+            for code, action in self._lang_actions.items():
+                action.setChecked(code == lang)
         self.retranslate_ui()
 
     def retranslate_ui(self):
@@ -1052,16 +1606,12 @@ class PingMonitor(QMainWindow):
             self._("Notifications: On") if self.notifications_enabled
             else self._("Notifications: Off")
         )
-        self.filter_button.setText(
-            self._("Show Failed Hosts") if not self.filter_failed
-            else self._("Show All Hosts")
-        )
+        self._update_filter_button_text()
         if hasattr(self, 'interval_caption'):
             self.interval_caption.setText(self._("Interval:"))
         if hasattr(self, 'hosts_caption'):
             self.hosts_caption.setText(self._("Monitored Hosts:"))
 
-        # --- Меню: только обновляем текст, ничего не удаляем ---
         self.menu_app.setTitle(self._("Application"))
         self.action_settings.setText(self._("Settings..."))
         self.action_export.setText(self._("Export Hosts..."))
@@ -1071,25 +1621,40 @@ class PingMonitor(QMainWindow):
 
         self.menu_help.setTitle(self._("Help"))
         self.action_help.setText(self._("User Guide"))
+        self.action_about.setText(self._("About"))
 
         self.menu_lang.setTitle(self._("Language"))
-        # Названия языков не переводим — они всегда "Русский" / "English"
+        # Language names are not translated — they are native and only change
+        # when the language itself changes. But update the checkmark in case
+        # the language was changed programmatically.
+        if hasattr(self, "_lang_actions"):
+            for code, action in self._lang_actions.items():
+                action.setChecked(code == self.language)
 
-        # --- Tray menu ---
         if hasattr(self, 'tray_action_restore'):
             self.tray_action_restore.setText(self._("Restore"))
             self.tray_action_quit.setText(self._("Quit"))
 
-        # --- Обновление списка хостов и tooltip'ов ---
         self.update_host_list_display()
         self.update_all_graphs()
 
-    # ---------- Контекстное меню ----------
+    # ---------- Context menu ----------
 
     def show_host_context_menu(self, position):
+        """From the tree: position is relative to host_list."""
+        self._show_host_context_menu_at(self.host_list.mapToGlobal(position))
+
+    def _on_host_context_menu_from_graph(self, host, global_pos):
+        """From a graph: select the corresponding host first, then show the menu."""
+        if host in self.host_widgets:
+            self._select_host_in_tree(host)
+        self._show_host_context_menu_at(global_pos)
+
+    def _show_host_context_menu_at(self, global_pos):
         sel = self.host_list.selectedItems()
         menu = QMenu()
-        clicked = self.host_list.itemAt(position)
+        pos_in_tree = self.host_list.mapFromGlobal(global_pos)
+        clicked = self.host_list.itemAt(pos_in_tree)
 
         if clicked and clicked.parent() is None:
             cat = clicked.data(0, Qt.ItemDataRole.UserRole)
@@ -1097,7 +1662,7 @@ class PingMonitor(QMainWindow):
             act.triggered.connect(lambda: self.delete_category(cat))
             act.setEnabled(cat != "Default")
             menu.addAction(act)
-            menu.exec(self.host_list.mapToGlobal(position))
+            menu.exec(global_pos)
             return
 
         hosts = [i.data(0, Qt.ItemDataRole.UserRole) for i in sel
@@ -1119,6 +1684,14 @@ class PingMonitor(QMainWindow):
             disable_action = QAction(disable_label, self)
             disable_action.triggered.connect(lambda: self.toggle_disabled(hosts))
 
+            any_unmuted = not all(
+                self.host_widgets[h].muted
+                for h in hosts if h in self.host_widgets
+            )
+            mute_label = self._("Mute notifications") if any_unmuted else self._("Unmute notifications")
+            mute_action = QAction(mute_label, self)
+            mute_action.triggered.connect(lambda: self.toggle_muted(hosts))
+
             check_type_menu = QMenu(self._("Check Type"), self)
             icmp_a = QAction(self._("ICMP Ping"), self)
             tcp_a = QAction(self._("TCP Port"), self)
@@ -1126,6 +1699,16 @@ class PingMonitor(QMainWindow):
             tcp_a.triggered.connect(lambda: self.set_check_type(hosts, 'tcp'))
             check_type_menu.addAction(icmp_a); check_type_menu.addAction(tcp_a)
             check_type_menu.setEnabled(len(hosts) == 1)
+
+            height_menu = QMenu(self._("Graph height"), self)
+            for label, mode in ((self._("Compact"), "compact"),
+                                (self._("Normal"), "normal"),
+                                (self._("Expanded"), "expanded")):
+                a = QAction(label, self)
+                a.setCheckable(True)
+                a.setChecked(self.graph_height_mode == mode)
+                a.triggered.connect(lambda _checked=False, m=mode: self.apply_graph_height(m))
+                height_menu.addAction(a)
 
             cat_action = QAction(self._("Set Category"), self)
             cat_action.triggered.connect(lambda: self.set_host_category(hosts))
@@ -1140,8 +1723,10 @@ class PingMonitor(QMainWindow):
             menu.addAction(delete_action)
             menu.addAction(ping_now_action)
             menu.addAction(disable_action)
+            menu.addAction(mute_action)
             menu.addSeparator()
             menu.addMenu(check_type_menu)
+            menu.addMenu(height_menu)
             menu.addAction(cat_action)
             menu.addSeparator()
             menu.addAction(clear_action)
@@ -1151,9 +1736,9 @@ class PingMonitor(QMainWindow):
             imp.triggered.connect(self.import_hosts_from_file)
             menu.addAction(imp)
 
-        menu.exec(self.host_list.mapToGlobal(position))
+        menu.exec(global_pos)
 
-    # ---------- Ping now / Disable ----------
+    # ---------- Ping now / Disable / Mute ----------
 
     def ping_now(self, hosts):
         for host in reversed(hosts):
@@ -1177,7 +1762,17 @@ class PingMonitor(QMainWindow):
         self.apply_filter()
         self.save_data()
 
-    # ---------- Категории ----------
+    def toggle_muted(self, hosts):
+        for h in hosts:
+            if h in self.host_widgets:
+                w = self.host_widgets[h]
+                w.set_muted(not w.muted)
+        self.update_host_list_display()
+        self.save_data()
+        self.apply_filter()
+        self.update_app_icon()
+
+    # ---------- Categories ----------
 
     def delete_category(self, category_name):
         if category_name == "Default":
@@ -1253,7 +1848,7 @@ class PingMonitor(QMainWindow):
                 self.save_data()
                 self.apply_filter()
 
-    # ---------- Тип проверки ----------
+    # ---------- Check type ----------
 
     def set_check_type(self, hosts, check_type):
         if not hosts:
@@ -1286,7 +1881,9 @@ class PingMonitor(QMainWindow):
     def update_host_item_text(self, host):
         if host not in self.host_widgets:
             return
-        text = f"{host} {self.get_host_check_tag(host)}"
+        w = self.host_widgets[host]
+        muted_tag = " [muted]" if w.muted else ""
+        text = f"{host} {self.get_host_check_tag(host)}{muted_tag}"
         for i in range(self.host_list.topLevelItemCount()):
             ci = self.host_list.topLevelItem(i)
             for j in range(ci.childCount()):
@@ -1295,7 +1892,7 @@ class PingMonitor(QMainWindow):
                     c.setText(0, text)
                     return
 
-    # ---------- Удаление ----------
+    # ---------- Deletion ----------
 
     def delete_hosts(self, hosts):
         r = QMessageBox.question(self, self._("Delete"),
@@ -1314,7 +1911,7 @@ class PingMonitor(QMainWindow):
             if not self.host_widgets:
                 self.ping_timer.stop()
 
-    # ---------- Очистка / загрузка истории ----------
+    # ---------- Clear / load history ----------
 
     def clear_host_history(self, hosts):
         if not hosts:
@@ -1327,12 +1924,12 @@ class PingMonitor(QMainWindow):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if r != QMessageBox.StandardButton.Yes:
             return
-        import shutil
         for h in hosts:
             if h not in self.host_widgets:
                 continue
             w = self.host_widgets[h]
             w.ping_history.clear()
+            w.loaded_days.clear()
             w.session_success_count = 0
             w.session_failure_count = 0
             w.consecutive_failures = 0
@@ -1352,42 +1949,145 @@ class PingMonitor(QMainWindow):
     def load_full_history(self, hosts):
         if not hosts:
             return
-        total = 0
+        to_load = {}
+        cutoff_date = (datetime.now() - timedelta(hours=self.retention_hours)).date()
         for h in hosts:
             if h not in self.host_widgets:
                 continue
             w = self.host_widgets[h]
-            loaded = self._load_single_host_history(h, w, full=True)
-            total += loaded
-            if loaded == 0:
-                QMessageBox.information(self, self._("Load Full History"),
-                                        self._("No history files found for host {}.").format(h))
-            w.graph_widget.update_history(w.ping_history, w.session_success_count,
-                                          w.session_failure_count, self.app_start_time)
-        self.apply_filter()
-        self.update_all_graphs()
-        if total > 0:
-            QMessageBox.information(self, self._("Load Full History"),
-                                    self._("History loaded ({} records). Zoom out to see older data.").format(total))
+            host_dir = self._host_dir(h)
+            all_days = set(list_history_days(host_dir))
+            all_days = {
+                d for d in all_days
+                if datetime.strptime(d, "%Y-%m-%d").date() >= cutoff_date
+            }
+            missing = all_days - w.loaded_days
+            if missing:
+                to_load[h] = sorted(missing)
 
-    # ---------- Список ----------
+        if to_load:
+            self._queue_day_load(to_load)
+            QMessageBox.information(
+                self, self._("Load Full History"),
+                self._("Loading history for {} host(s) in background.").format(len(to_load)))
+        else:
+            QMessageBox.information(
+                self, self._("Load Full History"),
+                self._("No additional history to load."))
+
+    # ---------- Per-day history on-demand loading ----------
+
+    def on_zoom_changed(self):
+        if not self.host_widgets:
+            return
+        if self.time_scale.zoom_periods:
+            visible_start, visible_end = self.time_scale.zoom_periods[-1]
+        else:
+            visible_start = self.time_scale.start_time
+            visible_end = self.time_scale.end_time
+        if visible_start is None or visible_end is None:
+            return
+
+        retention_cutoff = datetime.now() - timedelta(hours=self.retention_hours)
+        if visible_start < retention_cutoff:
+            visible_start = retention_cutoff
+
+        days_needed = _days_between(visible_start, visible_end)
+
+        to_load = {}
+        for host, w in self.host_widgets.items():
+            missing = days_needed - w.loaded_days
+            if missing:
+                to_load[host] = sorted(missing)
+
+        if to_load:
+            self._queue_day_load(to_load)
+
+    def _queue_day_load(self, to_load):
+        for host, days in to_load.items():
+            self._pending_days.setdefault(host, set()).update(days)
+        if self._history_loading_in_progress:
+            return
+        self._start_next_day_load()
+
+    def _start_next_day_load(self):
+        if not self._pending_days:
+            return
+        self._history_loading_in_progress = True
+        batch = {h: sorted(d) for h, d in self._pending_days.items()}
+        self._pending_days = {}
+        host_dirs = {host: self._host_dir(host) for host in batch}
+        worker = DayLoadWorker(host_dirs, batch)
+        worker.signals.finished.connect(self._on_days_loaded)
+        self.thread_pool.start(worker)
+
+    @pyqtSlot(dict)
+    def _on_days_loaded(self, result):
+        self._history_loading_in_progress = False
+
+        loaded_total = 0
+        for host, data in result.items():
+            if host not in self.host_widgets:
+                continue
+            w = self.host_widgets[host]
+
+            w.loaded_days.update(data['days_loaded'])
+
+            merged = w.ping_history + data['records']
+            merged.sort(key=lambda x: x[0])
+            deduped = []
+            last_t = None
+            for rec in merged:
+                if last_t is not None and rec[0] == last_t:
+                    continue
+                deduped.append(rec)
+                last_t = rec[0]
+            w.ping_history = deduped
+
+            file_latest = data.get('latest_time')
+            if file_latest is not None and (
+                w.last_saved_time is None or file_latest > w.last_saved_time
+            ):
+                w.last_saved_time = file_latest
+
+            failures = 0
+            for _, s, _ in reversed(deduped):
+                if not s:
+                    failures += 1
+                else:
+                    break
+            w.consecutive_failures = failures
+
+            w.graph_widget.update_history(
+                w.ping_history, w.session_success_count,
+                w.session_failure_count, self.app_start_time)
+            loaded_total += len(data['records'])
+
+        if loaded_total:
+            print(f"[history] Loaded {loaded_total} records for {len(result)} host(s)")
+        self.update_all_graphs()
+        self.apply_filter()
+
+        if self._pending_days:
+            self._start_next_day_load()
+
+    # ---------- Host list ----------
 
     def sorted_categories(self):
-        """Default всегда первым, остальные — по алфавиту."""
         others = sorted(c for c in self.categories_list if c != "Default")
         return ["Default"] + others
 
     def update_host_list_display(self):
         self.host_list.clear()
+        p = palette()
         for category in self.sorted_categories():
             ci = QTreeWidgetItem(self.host_list)
             ci.setText(0, f"[{category}] (0)")
             ci.setData(0, Qt.ItemDataRole.UserRole, category)
             ci.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsDropEnabled)
-            ci.setBackground(0, QColor("#E0E0E0"))
+            ci.setBackground(0, p.category_bg)
             ci.setExpanded(True)
             self.host_list.addTopLevelItem(ci)
-        # Порядок хостов внутри категорий — сохранённый (см. self.host_widgets)
         for host, w in self.host_widgets.items():
             if w.category not in self.categories_list:
                 w.category = "Default"
@@ -1395,21 +2095,24 @@ class PingMonitor(QMainWindow):
                 ci = self.host_list.topLevelItem(i)
                 if ci.data(0, Qt.ItemDataRole.UserRole) == w.category:
                     hi = QTreeWidgetItem(ci)
-                    hi.setText(0, f"{host} {self.get_host_check_tag(host)}")
+                    muted_tag = " [muted]" if w.muted else ""
+                    hi.setText(0, f"{host} {self.get_host_check_tag(host)}{muted_tag}")
                     hi.setData(0, Qt.ItemDataRole.UserRole, host)
                     hi.setFlags(Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable |
                                 Qt.ItemFlag.ItemIsDragEnabled)
                     hi.setForeground(0, self._host_color(w))
+                    hi.setBackground(0, p.clear_bg)
                     ci.addChild(hi)
         for i in range(self.host_list.topLevelItemCount()):
             ci = self.host_list.topLevelItem(i)
-            if self.filter_failed:
+            if self.filter_mode != "all" or self.search_text:
                 vh = sum(1 for j in range(ci.childCount()) if not ci.child(j).isHidden())
-                ci.setText(0, f"[{ci.data(0, Qt.ItemDataRole.UserRole)}] ({vh})")
+                ci.setText(0, f"[{ci.data(0, Qt.ItemDataRole.UserRole)}] ({vh}/{ci.childCount()})")
             else:
                 ci.setText(0, f"[{ci.data(0, Qt.ItemDataRole.UserRole)}] ({ci.childCount()})")
+        self._update_tree_width()
 
-    # ---------- Импорт ----------
+    # ---------- Import ----------
 
     def import_hosts_from_file(self):
         file_name, _ = QFileDialog.getOpenFileName(
@@ -1430,12 +2133,10 @@ class PingMonitor(QMainWindow):
         fmt = detect_import_format(file_name, content)
         print(f"[import] file={file_name} format={fmt}")
 
-        # Бэкап — отдельная логика
         if fmt == 'backup':
             self._restore_backup(content)
             return
 
-        # Остальные форматы дают {group: [host, ...]}
         if fmt == 'ansible_ini':
             groups = parse_ansible_ini(content)
         elif fmt == 'ansible_yaml':
@@ -1456,8 +2157,6 @@ class PingMonitor(QMainWindow):
         self._add_hosts_from_groups(groups)
 
     def _add_hosts_from_groups(self, groups):
-        """groups: {group_name: [host, ...]}. Добавляет хостов, автосоздаёт категории,
-        пропускает дубликаты."""
         added = 0
         for group, hosts_list in groups.items():
             cat = group if group else "Default"
@@ -1467,10 +2166,9 @@ class PingMonitor(QMainWindow):
                 h = h.strip()
                 if not h or h in self.host_widgets:
                     continue
-                w = HostWidget(h, self.time_scale, self.app_start_time, cat)
-                w.retention_hours = self.retention_hours
+                w = self._make_host_widget(h, cat)
                 self.host_widgets[h] = w
-                self._load_single_host_history(h, w, hours_limit=1)
+                self._load_single_host_history(h, w)
                 added += 1
 
         if added > 0:
@@ -1487,7 +2185,6 @@ class PingMonitor(QMainWindow):
             QMessageBox.warning(self, self._("Import"), self._("No new hosts added."))
 
     def _restore_backup(self, content):
-        """Восстанавливает список хостов из QPing-бэкапа."""
         data = parse_backup(content)
         if data is None:
             QMessageBox.warning(self, self._("Restore"),
@@ -1522,10 +2219,9 @@ class PingMonitor(QMainWindow):
                 self.categories_list.append(cat)
 
             if host not in self.host_widgets:
-                w = HostWidget(host, self.time_scale, self.app_start_time, cat)
-                w.retention_hours = self.retention_hours
+                w = self._make_host_widget(host, cat)
                 self.host_widgets[host] = w
-                self._load_single_host_history(host, w, full=False)
+                self._load_single_host_history(host, w)
             else:
                 w = self.host_widgets[host]
                 w.category = cat
@@ -1535,6 +2231,7 @@ class PingMonitor(QMainWindow):
             self.host_check_types[host] = {'type': ct, 'port': port}
             w.set_check_type(ct, port)
             w.set_disabled(info.get('disabled', False))
+            w.set_muted(info.get('muted', False))
             added += 1
 
         self.update_host_list_display()
@@ -1548,7 +2245,6 @@ class PingMonitor(QMainWindow):
                                 self._("Restored {} hosts.").format(added))
 
     def export_hosts_to_file(self):
-        """Сохраняет список хостов в QPing-бэкап."""
         file_name, _ = QFileDialog.getSaveFileName(
             self, self._("Export hosts"),
             os.path.join(os.path.expanduser("~"), "qping_backup.qping.json"),
@@ -1573,6 +2269,7 @@ class PingMonitor(QMainWindow):
                         'check_type': info.get('type', 'icmp'),
                         'port': info.get('port'),
                         'disabled': bool(w.disabled),
+                        'muted': bool(w.muted),
                     })
 
         for i in range(self.host_list.topLevelItemCount()):
@@ -1589,27 +2286,64 @@ class PingMonitor(QMainWindow):
         QMessageBox.information(self, self._("Export completed"),
                                 self._("Exported {} hosts to:\n{}").format(len(hosts_data), file_name))
 
+    # ---------- Tray icon ----------
 
-    # ---------- Иконка трея ----------
+    def _make_badge_icon(self, base_color_hex, count):
+        """Icon with a number inside: count > 0 draws the badge. Cached."""
+        if count <= 0:
+            return self.create_icon(base_color_hex)
+        key = (base_color_hex, min(count, 99))
+        cached = self._icon_cache.get(key)
+        if cached is not None:
+            return cached
+
+        icon = QIcon()
+        for size in (16, 22, 24, 32, 48, 64, 128, 256):
+            pixmap = QPixmap(size, size)
+            pixmap.fill(Qt.GlobalColor.transparent)
+            painter = QPainter(pixmap)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            margin = max(1, size // 16)
+            painter.setBrush(QColor(base_color_hex))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(margin, margin,
+                                size - 2 * margin, size - 2 * margin)
+            label = str(count) if count < 100 else "99+"
+            font_size = int(size * (0.62 if count < 10 else 0.5))
+            painter.setPen(QColor("white"))
+            painter.setFont(QFont("Arial", max(7, font_size), QFont.Weight.Bold))
+            painter.drawText(pixmap.rect(),
+                             Qt.AlignmentFlag.AlignCenter, label)
+            painter.end()
+            icon.addPixmap(pixmap)
+
+        self._icon_cache[key] = icon
+        return icon
 
     def update_app_icon(self):
-        has_red = any(w.consecutive_failures >= self.alerts_after_failures
-                      for w in self.host_widgets.values() if not w.disabled)
-        has_yellow = any(w.consecutive_failures == 1
-                         for w in self.host_widgets.values() if not w.disabled)
-        if has_red:
-            new_icon = self.red_icon
+        down_count = sum(
+            1 for w in self.host_widgets.values()
+            if not w.disabled and not w.muted
+            and w.consecutive_failures >= self.alerts_after_failures
+        )
+        has_yellow = any(
+            1 <= w.consecutive_failures < self.alerts_after_failures
+            for w in self.host_widgets.values()
+            if not w.disabled and not w.muted
+        )
+        if down_count > 0:
+            new_icon = self._make_badge_icon("#F44336", down_count)
         elif has_yellow:
             new_icon = self.yellow_icon
         else:
             new_icon = self.green_icon
-        # Обновляем только при реальной смене — иначе DE мерцает при каждом setIcon.
+
         if new_icon is not self._current_icon:
             self._current_icon = new_icon
             self.setWindowIcon(new_icon)
             self.tray_icon.setIcon(new_icon)
 
-    # ---------- Очереди ----------
+    # ---------- Queues ----------
 
     def update_host_queue(self):
         self.icmp_queue = []
@@ -1642,11 +2376,12 @@ class PingMonitor(QMainWindow):
             if not self.ping_timer.isActive():
                 self.ping_timer.start(self.interval_slider.value())
 
-    # ---------- Подсветка ----------
+    # ---------- Highlight ----------
 
     def _clear_highlight(self):
+        p = palette()
         for h in self._highlighted_hosts:
-            self._set_host_bg(h, QColor("white"))
+            self._set_host_bg(h, p.clear_bg)
         self._highlighted_hosts = []
 
     def _set_host_bg(self, host, color):
@@ -1659,17 +2394,16 @@ class PingMonitor(QMainWindow):
                     return
 
     def _host_color(self, widget):
-        """Цвет текста хоста в дереве."""
+        p = palette()
         if widget.disabled:
-            return QColor("gray")
+            return p.host_disabled
         if widget.consecutive_failures >= self.alerts_after_failures:
-            return QColor("#C62828")   # красный
+            return p.host_down
         if widget.consecutive_failures >= 1:
-            return QColor("#EF6C00")   # оранжевый для «warning»
-        return QColor(Qt.GlobalColor.black)
+            return p.host_warn
+        return p.host_normal
 
     def _set_host_color(self, host):
-        """Обновляет цвет текста хоста в дереве."""
         w = self.host_widgets.get(host)
         if not w:
             return
@@ -1707,7 +2441,7 @@ class PingMonitor(QMainWindow):
         self.tcp_idx = (self.tcp_idx + 1) % len(self.tcp_queue)
         return h
 
-    # ---------- Тик ----------
+    # ---------- Tick ----------
 
     def ping_tick(self):
         if not self.host_widgets:
@@ -1735,11 +2469,12 @@ class PingMonitor(QMainWindow):
             self.ping_manager.ping_host(h_tcp, 'tcp', info.get('port'))
             scheduled.append(h_tcp)
 
+        p = palette()
         for h in scheduled:
-            self._set_host_bg(h, QColor("#ADD8E6"))
+            self._set_host_bg(h, p.highlight_bg)
         self._highlighted_hosts = scheduled
 
-    # ---------- Результат ping ----------
+    # ---------- Ping result ----------
 
     def handle_ping_result(self, host, success, latency):
         current_time = datetime.now()
@@ -1753,47 +2488,38 @@ class PingMonitor(QMainWindow):
                 if w.was_down:
                     w.was_down = False
                     self.fire_hook("up", host, failures=0)
-                    if self.notify_on_recovery and self.notifications_enabled:
-                        if not self.tray_icon.isVisible():
-                            self.tray_icon.setVisible(True)
-                        self.tray_icon.showMessage(
-                            self._("Host recovered"),
-                            self._("Host {} is responding again").format(host),
-                            QSystemTrayIcon.MessageIcon.Information,
-                            5000)
+                    if (self.notify_on_recovery
+                            and self.notifications_enabled
+                            and not w.muted):
+                        self._queue_notification("up", host)
                 w.last_notified = None
             else:
                 if consecutive >= self.alerts_after_failures:
                     if not w.was_down:
                         w.was_down = True
                         self.fire_hook("down", host, failures=consecutive)
-                    if self.notifications_enabled:
+                    if self.notifications_enabled and not w.muted:
                         last = w.last_notified
-                        if last is None or (current_time - last).total_seconds() >= self.alert_reminder_minutes * 60:
+                        if (last is None
+                                or (current_time - last).total_seconds()
+                                    >= self.alert_reminder_minutes * 60):
                             w.last_notified = current_time
-                            if not self.tray_icon.isVisible():
-                                self.tray_icon.setVisible(True)
                             print(f"[notify] host={host} fails={consecutive}")
-                            self.tray_icon.showMessage(
-                                self._("Host unavailable"),
-                                self._("Host {} is not responding ({} failures)").format(host, consecutive),
-                                QSystemTrayIcon.MessageIcon.Warning,
-                                5000)
+                            self._queue_notification("down", host, consecutive)
 
         self.update_app_icon()
         if host in self.host_widgets:
             self._set_host_color(host)
         self.apply_filter()
 
-    # ---------- Добавление / редактирование ----------
+    # ---------- Add / edit ----------
 
     def add_host(self):
         host = self.host_input.text().strip()
         if host and host not in self.host_widgets:
-            w = HostWidget(host, self.time_scale, self.app_start_time, "Default")
-            w.retention_hours = self.retention_hours
+            w = self._make_host_widget(host, "Default")
             self.host_widgets[host] = w
-            self._load_single_host_history(host, w, hours_limit=1)
+            self._load_single_host_history(host, w)
             self.update_host_list_display()
             self.reorder_graphs()
             self.host_input.clear()
@@ -1808,34 +2534,103 @@ class PingMonitor(QMainWindow):
         self.interval_label.setText(self._("Interval: {}ms").format(interval))
         self.ping_manager.set_ping_interval(interval)
         self.settings.setValue("interval", interval)
+        for w in self.host_widgets.values():
+            w.graph_widget.set_check_interval(interval)
         if self.ping_timer.isActive():
             self.ping_timer.start(interval)
+
+    def _rename_host_history_dir(self, old_host, new_host):
+        old_dir = self._host_dir(old_host)
+        new_dir = self._host_dir(new_host)
+        try:
+            os.makedirs(new_dir, exist_ok=True)
+
+            if os.path.isdir(old_dir) and os.path.realpath(old_dir) != os.path.realpath(new_dir):
+                for fname in os.listdir(old_dir):
+                    src = os.path.join(old_dir, fname)
+                    dst = os.path.join(new_dir, fname)
+                    if not os.path.isfile(src):
+                        continue
+                    if fname == 'meta.json':
+                        try:
+                            if os.path.exists(dst):
+                                os.remove(dst)
+                            shutil.move(src, dst)
+                        except OSError as e:
+                            print(f"[rename] meta move: {e}")
+                    elif fname.endswith('.jsonl'):
+                        if os.path.exists(dst):
+                            try:
+                                with open(src, 'r') as sf, open(dst, 'a') as df:
+                                    df.write(sf.read())
+                                os.remove(src)
+                            except OSError as e:
+                                print(f"[rename] merge {fname}: {e}")
+                        else:
+                            try:
+                                shutil.move(src, dst)
+                            except OSError as e:
+                                print(f"[rename] move {fname}: {e}")
+                    else:
+                        try:
+                            shutil.move(src, dst)
+                        except OSError as e:
+                            print(f"[rename] move {fname}: {e}")
+
+                try:
+                    if os.path.isdir(old_dir) and not os.listdir(old_dir):
+                        os.rmdir(old_dir)
+                except OSError:
+                    pass
+
+            with open(os.path.join(new_dir, 'meta.json'), 'w') as mf:
+                json.dump({
+                    'host': new_host,
+                    'check_type': self.host_check_types.get(
+                        new_host, {'type': 'icmp', 'port': None}),
+                }, mf, indent=2)
+        except Exception as e:
+            print(f"[rename] Failed to rename history {old_dir} -> {new_dir}: {e}")
 
     def edit_host(self, host):
         if not host:
             return
-        new_host, ok = QInputDialog.getText(self, self._("Edit"), self._("New host name:"), text=host)
-        if ok and new_host and new_host != host:
-            w = self.host_widgets[host]
-            w.host = new_host
-            w.graph_widget.host = new_host
-            w.update_host_label()
-            # Сохраняем позицию в словаре: пересобираем с сохранением порядка.
-            new_widgets = {}
-            for h, w in self.host_widgets.items():
-                if h == host:
-                    new_widgets[new_host] = w
-                else:
-                    new_widgets[h] = w
-            self.host_widgets = new_widgets
+        new_host, ok = QInputDialog.getText(self, self._("Edit"),
+                                            self._("New host name:"), text=host)
+        if not (ok and new_host and new_host.strip() and new_host != host):
+            return
+        new_host = new_host.strip()
+        if new_host in self.host_widgets:
+            QMessageBox.warning(self, self._("Edit"),
+                                self._("Host '{}' already exists.").format(new_host))
+            return
 
-            if host in self.host_check_types:
-                self.host_check_types[new_host] = self.host_check_types.pop(host)
-            self.update_host_list_display()
-            self.reorder_graphs()
-            self.save_data()
-            self.apply_filter()
-            self.update_host_queue()
+        w = self.host_widgets[host]
+
+        if host in self.host_check_types:
+            self.host_check_types[new_host] = self.host_check_types.pop(host)
+
+        self._rename_host_history_dir(host, new_host)
+
+        w.host = new_host
+        w.graph_widget.host = new_host
+        w.update_host_label()
+
+        new_widgets = {}
+        for h, wdg in self.host_widgets.items():
+            if h == host:
+                new_widgets[new_host] = wdg
+            else:
+                new_widgets[h] = wdg
+        self.host_widgets = new_widgets
+
+        self.update_host_list_display()
+        self.reorder_graphs()
+        self.save_data()
+        self.apply_filter()
+        self.update_host_queue()
+
+        self._select_host_in_tree(new_host)
 
     # ---------- Save ----------
 
@@ -1866,11 +2661,11 @@ class PingMonitor(QMainWindow):
                     w = self.host_widgets[h]
                     if cat_name:
                         w.category = cat_name
-                    hosts.append([h, w.category, bool(w.disabled)])
+                    hosts.append([h, w.category, bool(w.disabled), bool(w.muted)])
         for i in range(self.host_list.topLevelItemCount()):
             traverse(self.host_list.topLevelItem(i))
         self.settings.setValue("hosts", hosts)
-        self.settings.setValue("filter_failed", self.filter_failed)
+        self.settings.setValue("filter_mode", self.filter_mode)
         self.settings.setValue("categories", self.categories_list)
         self.settings.setValue("retention_hours", self.retention_hours)
         self.settings.setValue("minimize_on_escape", self.minimize_on_escape)
@@ -1882,13 +2677,20 @@ class PingMonitor(QMainWindow):
         self.settings.setValue("hooks_enabled", self.hooks_enabled)
         self.settings.setValue("hooks_dir", self.hooks_dir)
         self.settings.setValue("fping_batch_size", self.fping_batch_size)
+        self.settings.setValue("ping_timeout_ms", self.ping_timeout_ms)
+        self.settings.setValue("appearance", self.appearance)
+        self.settings.setValue("graph_show_latency", self.graph_show_latency)
+        self.settings.setValue("graph_height_mode", self.graph_height_mode)
 
         if self._save_in_progress:
             return
         snap = self._build_snapshot()
         self._save_in_progress = True
         worker = SaveWorker(snap)
-        worker.signals.finished.connect(self._on_save_finished)
+        self._save_workers.add(worker)
+        worker.signals.finished.connect(
+            lambda r, w=worker: self._on_save_finished(r, w)
+        )
         self.thread_pool.start(worker)
 
     def _save_data_sync(self):
@@ -1922,7 +2724,9 @@ class PingMonitor(QMainWindow):
                 print(f"[save-sync] {host}: {e}")
 
     @pyqtSlot(dict)
-    def _on_save_finished(self, result):
+    def _on_save_finished(self, result, worker=None):
+        if worker is not None:
+            self._save_workers.discard(worker)
         for host, latest in result.items():
             if host in self.host_widgets and latest is not None:
                 self.host_widgets[host].last_saved_time = latest
@@ -1930,9 +2734,7 @@ class PingMonitor(QMainWindow):
 
     # ---------- Load ----------
 
-    def _load_single_host_history(self, host, widget, full=False, hours_limit=None):
-        """full=True — вся история; hours_limit=N — последние N часов;
-        иначе — retention_hours."""
+    def _load_single_host_history(self, host, widget):
         host_dir = self._host_dir(host)
         if not os.path.isdir(host_dir):
             return 0
@@ -1949,16 +2751,15 @@ class PingMonitor(QMainWindow):
         self.host_check_types[host] = check_info
         widget.set_check_type(check_info['type'], check_info.get('port'))
 
-        if full:
-            limit = None
-        elif hours_limit is not None:
-            limit = hours_limit
-        else:
-            limit = self.retention_hours
+        now = datetime.now()
+        initial_days = _days_between(now - timedelta(hours=1), now)
+        existing = set(list_history_days(host_dir))
+        days_to_load = sorted(initial_days & existing)
 
-        records, latest_time = read_history_files(host_dir, hours_limit=limit)
+        records, latest_time = read_history_days(host_dir, days_to_load)
 
         widget.ping_history = records
+        widget.loaded_days = set(days_to_load)
         widget.last_saved_time = latest_time
 
         failures = 0
@@ -1974,29 +2775,28 @@ class PingMonitor(QMainWindow):
             widget.session_failure_count, self.app_start_time)
         return len(records)
 
-
     def load_data(self):
         hosts = self.settings.value("hosts", [], type=list)
         for hd in hosts:
             disabled = False
+            muted = False
             if isinstance(hd, (list, tuple)) and len(hd) >= 2:
                 host, category = hd[0], hd[1]
                 disabled = bool(hd[2]) if len(hd) > 2 else False
+                muted = bool(hd[3]) if len(hd) > 3 else False
             else:
                 host = hd if isinstance(hd, str) else str(hd)
                 category = "Default"
             if isinstance(host, str) and host:
                 if category not in self.categories_list:
                     self.categories_list.append(category)
-                w = HostWidget(host, self.time_scale, self.app_start_time, category)
-                w.retention_hours = self.retention_hours
+                w = self._make_host_widget(host, category)
                 w.set_disabled(disabled)
+                w.set_muted(muted)
                 self.host_widgets[host] = w
 
-        # По умолчанию загружаем только последний час.
-        # Полная история подтянется при прокрутке шкалы в прошлое (см. on_zoom_changed).
         for host, w in self.host_widgets.items():
-            loaded = self._load_single_host_history(host, w, hours_limit=1)
+            loaded = self._load_single_host_history(host, w)
             if loaded:
                 print(f"[load] Loaded {loaded} records for {host}")
 
@@ -2007,75 +2807,6 @@ class PingMonitor(QMainWindow):
 
         if self.host_widgets:
             self.start_pinging()
-
-    def on_zoom_changed(self):
-        """Реагирует на изменение временного окна.
-        Если пользователь ушёл назад дальше загруженного — подгружает полную историю."""
-        if self._history_fully_loaded or self._history_loading_in_progress:
-            return
-        if not self.host_widgets:
-            return
-
-        if self.time_scale.zoom_periods:
-            visible_start = self.time_scale.zoom_periods[-1][0]
-        else:
-            visible_start = self.time_scale.start_time
-        if visible_start is None:
-            return
-
-        # Порог: дефолт 1 час + небольшой запас
-        threshold = datetime.now() - timedelta(hours=1, minutes=5)
-        if visible_start < threshold:
-            self.start_full_history_load()
-
-    def start_full_history_load(self):
-        self._history_loading_in_progress = True
-        print("[history] Loading full history in background...")
-        host_dirs = {host: self._host_dir(host) for host in self.host_widgets}
-        worker = HistoryLoadWorker(host_dirs, self.retention_hours)
-        worker.signals.finished.connect(self._on_full_history_loaded)
-        self.thread_pool.start(worker)
-
-    @pyqtSlot(dict)
-    def _on_full_history_loaded(self, result):
-        self._history_loading_in_progress = False
-        self._history_fully_loaded = True
-        merged_count = 0
-        for host, data in result.items():
-            if host not in self.host_widgets:
-                continue
-            w = self.host_widgets[host]
-            file_records = data.get('records', [])
-            file_latest = data.get('latest_time')
-
-            # Записи, пришедшие в память пока шла загрузка (новее файловых)
-            if file_latest is not None:
-                memory_new = [r for r in w.ping_history if r[0] > file_latest]
-            else:
-                memory_new = list(w.ping_history)
-
-            merged = file_records + memory_new
-            merged.sort(key=lambda x: x[0])
-            w.ping_history = merged
-            if file_latest is not None:
-                w.last_saved_time = file_latest
-            merged_count += len(merged)
-
-            failures = 0
-            for _, s, _ in reversed(merged):
-                if not s:
-                    failures += 1
-                else:
-                    break
-            w.consecutive_failures = failures
-
-            w.graph_widget.update_history(
-                w.ping_history, w.session_success_count,
-                w.session_failure_count, self.app_start_time)
-
-        print(f"[history] Full history loaded ({merged_count} records total)")
-        self.update_all_graphs()
-        self.apply_filter()
 
     def update_all_graphs(self):
         for w in self.host_widgets.values():

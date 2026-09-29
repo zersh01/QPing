@@ -1,33 +1,91 @@
 # ping_widgets.py
 """
-Виджеты QPing: TimeScaleWidget, PingGraphWidget, HostWidget.
+QPing widgets: TimeScaleWidget, PingGraphWidget, HostWidget.
 
-Требуют PyQt6 и, для HostWidget.graph_widget, функций из utils.
+Require PyQt6 and, for HostWidget.graph_widget, helpers from utils.
 """
 import bisect
 import builtins
 from datetime import datetime, timedelta
-from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout
-from PyQt6.QtCore import Qt, QRect, pyqtSignal
-from PyQt6.QtGui import QPainter, QColor, QFont
+from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QSizePolicy
+from PyQt6.QtCore import Qt, QRect, QPoint, pyqtSignal
+from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QPainterPath
 
 from utils import compute_latency_stats, compute_recent_stats
+from theme import palette
+
 
 def _t(s):
-    """Локализация. Берёт актуальный `_` из builtins (установлен setup_localization).
-    Если перевода нет — возвращает исходную строку."""
+    """Localization. Uses the current `_` from builtins (installed by
+    setup_localization). If no translation is found, returns the source string."""
     f = getattr(builtins, '_', None)
     return f(s) if f is not None else s
 
+
+# ---------- Y-axis helpers ----------
+
+def _nice_scale_max(v):
+    """Rounded-up upper bound of the Y axis. Small steps for LAN (< 10 ms)."""
+    if v <= 0:
+        return 10.0
+    for c in (0.5, 1, 2, 5, 10, 20, 50, 100, 200, 500,
+              1000, 2000, 5000, 10000, 20000, 50000):
+        if v <= c:
+            return float(c)
+    return float(int(v * 1.2))
+
+
+def _pick_ymax(lats):
+    """Y upper bound from the 95th percentile: single spikes do not stretch the scale."""
+    if not lats:
+        return 100.0
+    s = sorted(lats)
+    idx = max(0, min(len(s) - 1, int(round(len(s) * 0.95)) - 1))
+    return _nice_scale_max(s[idx] * 1.15)
+
+
+def _grid_values(ymax, density="normal"):
+    """Grid line values.
+    density: 'compact' — 2 lines, 'normal' — 3-5, 'expanded' — 6."""
+    if ymax <= 0:
+        return []
+    if density == "compact":
+        return [0.0, ymax]
+    if density == "expanded":
+        n = 6
+        return [ymax * i / (n - 1) for i in range(n)]
+    # normal
+    if ymax <= 50:
+        return [0.0, ymax / 2.0, ymax]
+    if ymax <= 500:
+        return [0.0, ymax / 4.0, ymax / 2.0, 3 * ymax / 4.0, ymax]
+    return [0.0, ymax / 2.0, ymax]
+
+
+def _format_ms(v):
+    """Human-readable Y-axis label."""
+    if v >= 1000:
+        return f"{v / 1000:.1f}s"
+    if v >= 10:
+        return f"{int(round(v))}ms"
+    if v >= 1:
+        return f"{v:.1f}ms"
+    return f"{v:.2f}ms"
+
+
+# ---------- Time scale ----------
+
 class TimeScaleWidget(QWidget):
-    """Виджет временной шкалы для графиков."""
+    """Time scale widget for the graphs."""
 
     zoom_changed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedHeight(40)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.setMouseTracking(True)
+        self.setAutoFillBackground(True)
         self.start_time = None
         self.end_time = None
         self.zoom_start = None
@@ -39,8 +97,17 @@ class TimeScaleWidget(QWidget):
         self._dragging = False
         self._drag_start_pos = None
         self._drag_current_pos = None
+        self.left_gutter = 0
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.reset_zoom()
+
+    def set_left_gutter(self, g):
+        """Synchronize the left padding with PingGraphWidget.LEFT_GUTTER so
+        that time labels sit exactly under the graph columns."""
+        g = max(0, int(g))
+        if g != self.left_gutter:
+            self.left_gutter = g
+            self.update()
 
     def reset_zoom(self):
         current_time = datetime.now()
@@ -92,15 +159,25 @@ class TimeScaleWidget(QWidget):
             self.update()
             self.zoom_changed.emit()
 
+    def _plot_geometry(self):
+        """Return (plot_x, plot_w) taking left_gutter into account."""
+        w = self.width()
+        px = self.left_gutter
+        pw = max(1, w - self.left_gutter)
+        return px, pw
+
     def wheelEvent(self, event):
         pos_x = event.position().x()
-        width = self.width()
+        plot_x, plot_w = self._plot_geometry()
+        if plot_w <= 0:
+            return
+        rel_x = max(0, min(plot_w, pos_x - plot_x))
         if self.zoom_periods:
             current_start, current_end = self.zoom_periods[-1]
         else:
             current_start, current_end = self.start_time, self.end_time
         total_seconds = (current_end - current_start).total_seconds()
-        cursor_time = current_start + timedelta(seconds=pos_x / width * total_seconds)
+        cursor_time = current_start + timedelta(seconds=rel_x / plot_w * total_seconds)
         zoom_direction = 1 if event.angleDelta().y() > 0 else -1
         zoom_scale = 1.1 if zoom_direction > 0 else 0.9
         new_duration = total_seconds / zoom_scale
@@ -137,7 +214,6 @@ class TimeScaleWidget(QWidget):
         if event.button() == Qt.MouseButton.LeftButton and self._dragging:
             self._dragging = False
             end_pos = event.position().x()
-            # Если пользователь почти не двигал мышь — считаем это кликом и отменяем.
             if self._drag_start_pos is None or abs(end_pos - self._drag_start_pos) < 3:
                 self.zoom_start = None
                 self.zoom_end = None
@@ -153,108 +229,164 @@ class TimeScaleWidget(QWidget):
             self.add_zoom_period(start_time, end_time)
 
     def pos_to_time(self, pos_x):
-        width = self.width()
+        plot_x, plot_w = self._plot_geometry()
+        rel_x = max(0, min(plot_w, pos_x - plot_x))
         if self.zoom_start and self.zoom_end and self.zoom_periods:
             total_seconds = (self.zoom_end - self.zoom_start).total_seconds()
-            return self.zoom_start + timedelta(seconds=pos_x / width * total_seconds)
+            return self.zoom_start + timedelta(seconds=rel_x / plot_w * total_seconds)
         else:
             total_seconds = (self.end_time - self.start_time).total_seconds()
-            return self.start_time + timedelta(seconds=pos_x / width * total_seconds)
+            return self.start_time + timedelta(seconds=rel_x / plot_w * total_seconds)
 
     def paintEvent(self, event):
+        p = palette()
         painter = QPainter(self)
-        width = self.width()
-        painter.setPen(QColor(Qt.GlobalColor.black))
-        painter.setFont(QFont("Arial", 8))
-        if self.zoom_periods:
-            visible_start, visible_end = self.zoom_periods[-1]
-        else:
-            visible_start, visible_end = self.start_time, self.end_time
-        visible_seconds = (visible_end - visible_start).total_seconds()
-        if visible_seconds <= 0:
-            return
-        pixels_per_second = width / visible_seconds
+        try:
+            painter.fillRect(self.rect(), p.clear_bg)
 
-        if visible_seconds <= 60:                # до 1 мин
-            step = 5; format_str = "%H:%M:%S"
-        elif visible_seconds <= 300:             # до 5 мин
-            step = 15; format_str = "%H:%M:%S"
-        elif visible_seconds <= 1800:            # до 30 мин
-            step = 60; format_str = "%H:%M"
-        elif visible_seconds <= 3600:            # до 1 часа
-            step = 300; format_str = "%H:%M"
-        elif visible_seconds <= 7200:            # до 2 часов
-            step = 600; format_str = "%H:%M"
-        elif visible_seconds <= 14400:           # до 4 часов
-            step = 1800; format_str = "%H:%M"
-        elif visible_seconds <= 28800:           # до 8 часов
-            step = 3600; format_str = "%H:%M"
-        elif visible_seconds <= 86400:           # до 24 часов
-            step = 7200; format_str = "%H:%M"
-        elif visible_seconds <= 172800:          # до 48 часов
-            step = 10800; format_str = "%d.%m %H:%M"
-        elif visible_seconds <= 86400 * 7:       # до недели
-            step = 21600; format_str = "%d.%m %H:%M"
-        elif visible_seconds <= 86400 * 30:      # до месяца
-            step = 86400; format_str = "%d.%m"
-        else:
-            step = 86400 * 3; format_str = "%d.%m"
+            plot_x, plot_w = self._plot_geometry()
+            if plot_w <= 0:
+                return
 
-        current = visible_start.replace(microsecond=0)
-        if step < 60:
-            current = current.replace(second=(current.second // step) * step)
-        elif step < 3600:
-            current = current.replace(minute=(current.minute // (step // 60)) * (step // 60), second=0)
-        elif step < 86400:
-            hours_step = step // 3600
-            current = current.replace(hour=(current.hour // hours_step) * hours_step, minute=0, second=0)
-        else:
-            current = current.replace(hour=0, minute=0, second=0)
+            if self.zoom_periods:
+                visible_start, visible_end = self.zoom_periods[-1]
+            else:
+                visible_start, visible_end = self.start_time, self.end_time
+            visible_seconds = (visible_end - visible_start).total_seconds()
+            if visible_seconds <= 0:
+                return
 
-        while current <= visible_end:
-            pos = int((current - visible_start).total_seconds() * pixels_per_second)
-            if 0 <= pos <= width:
-                painter.drawLine(pos, 0, pos, 15)
-                painter.drawText(QRect(pos - 50, 20, 100, 20),
-                                 Qt.AlignmentFlag.AlignCenter,
-                                 current.strftime(format_str))
-            current += timedelta(seconds=step)
+            pixels_per_second = plot_w / visible_seconds
 
-        # Выделение при перетаскивании
-        if self._dragging and self._drag_start_pos is not None and self._drag_current_pos is not None:
-            x1 = min(self._drag_start_pos, self._drag_current_pos)
-            x2 = max(self._drag_start_pos, self._drag_current_pos)
-            if x2 - x1 >= 1:
-                painter.setBrush(QColor(30, 120, 200, 60))
-                painter.setPen(QColor(30, 120, 200, 200))
-                painter.drawRect(int(x1), 0, int(x2 - x1), self.height())
+            if visible_seconds <= 60:
+                step = 5; format_str = "%H:%M:%S"
+            elif visible_seconds <= 300:
+                step = 15; format_str = "%H:%M:%S"
+            elif visible_seconds <= 1800:
+                step = 60; format_str = "%H:%M"
+            elif visible_seconds <= 3600:
+                step = 300; format_str = "%H:%M"
+            elif visible_seconds <= 7200:
+                step = 600; format_str = "%H:%M"
+            elif visible_seconds <= 14400:
+                step = 1800; format_str = "%H:%M"
+            elif visible_seconds <= 28800:
+                step = 3600; format_str = "%H:%M"
+            elif visible_seconds <= 86400:
+                step = 7200; format_str = "%H:%M"
+            elif visible_seconds <= 172800:
+                step = 10800; format_str = "%d.%m %H:%M"
+            elif visible_seconds <= 86400 * 7:
+                step = 21600; format_str = "%d.%m %H:%M"
+            elif visible_seconds <= 86400 * 30:
+                step = 86400; format_str = "%d.%m"
+            else:
+                step = 86400 * 3; format_str = "%d.%m"
 
+            current = visible_start.replace(microsecond=0)
+            if step < 60:
+                current = current.replace(second=(current.second // step) * step)
+            elif step < 3600:
+                current = current.replace(minute=(current.minute // (step // 60)) * (step // 60), second=0)
+            elif step < 86400:
+                hours_step = step // 3600
+                current = current.replace(hour=(current.hour // hours_step) * hours_step, minute=0, second=0)
+            else:
+                current = current.replace(hour=0, minute=0, second=0)
+
+            painter.setFont(QFont("Arial", 8))
+            while current <= visible_end:
+                pos = plot_x + int((current - visible_start).total_seconds() * pixels_per_second)
+                if plot_x <= pos <= self.width():
+                    painter.setPen(p.time_axis)
+                    painter.drawLine(pos, 0, pos, 15)
+                    painter.drawText(QRect(pos - 50, 20, 100, 20),
+                                     Qt.AlignmentFlag.AlignCenter,
+                                     current.strftime(format_str))
+                current += timedelta(seconds=step)
+
+            if self._dragging and self._drag_start_pos is not None and self._drag_current_pos is not None:
+                x1 = min(self._drag_start_pos, self._drag_current_pos)
+                x2 = max(self._drag_start_pos, self._drag_current_pos)
+                if x2 - x1 >= 1:
+                    painter.setBrush(p.drag_fill)
+                    painter.setPen(p.drag_stroke)
+                    painter.drawRect(int(x1), 0, int(x2 - x1), self.height())
+        finally:
+            painter.end()
+
+
+# ---------- Graph ----------
 
 class PingGraphWidget(QWidget):
-    """Виджет для отображения графика ping."""
+    """Ping graph: solid bars filling the space between checks,
+    with a latency line on top. Long pauses are left blank."""
 
-    BAR_WIDTH = 4
+    context_menu_requested = pyqtSignal(str, QPoint)   # host, global_pos
+
+    LEFT_GUTTER = 46
+    TOP_MARGIN = 4
+    BOTTOM_MARGIN = 2
+    MIN_BAR_W = 3
+
+    # Graph height presets
+    HEIGHTS = {
+        "compact": 50,
+        "normal": 80,
+        "expanded": 200,
+    }
 
     def __init__(self, time_scale, host, parent=None):
         super().__init__(parent)
         self.time_scale = time_scale
         self.host = host
-        self.setMinimumHeight(60)
-        self.setMouseTracking(True)          # нужно для hover без нажатия
+        self.setMouseTracking(True)
         self.history = []
         self.session_success_count = 0
         self.session_failure_count = 0
         self.app_start_time = None
-        self._times_cache = []               # кэш времён для бинарного поиска
-        self._hover_pos = None               # X-координата курсора или None
-        self.recent_window_minutes = 5       # скользящее окно для jitter
+        self._times_cache = []
+        self._hover_pos = None
+        self.recent_window_minutes = 5
+        self.show_latency = True
+        self._current_ymax = 100.0
+        self.check_interval_ms = 1000
+        self.height_mode = "normal"            # 'compact' | 'normal' | 'expanded'
+        self._apply_height()
+
+    def set_show_latency(self, on):
+        self.show_latency = bool(on)
+        self._apply_height()
+        self.update()
+
+    def set_graph_height_mode(self, mode):
+        """Apply height mode: 'compact' | 'normal' | 'expanded'."""
+        if mode not in self.HEIGHTS:
+            mode = "normal"
+        if mode != self.height_mode:
+            self.height_mode = mode
+            self._apply_height()
+            self.update()
+
+    def _apply_height(self):
+        """Compute and set the minimum height.
+        Compact without latency is even shorter (45)."""
+        h = self.HEIGHTS.get(self.height_mode, 80)
+        if self.height_mode == "compact" and not self.show_latency:
+            h = 45
+        self.setMinimumHeight(h)
+
+    def set_check_interval(self, ms):
+        ms = max(100, int(ms))
+        if ms != self.check_interval_ms:
+            self.check_interval_ms = ms
+            self.update()
 
     def update_history(self, history, session_success_count, session_failure_count, app_start_time):
         self.history = history
         self.session_success_count = session_success_count
         self.session_failure_count = session_failure_count
         self.app_start_time = app_start_time
-        # Кэш времён — для быстрого поиска ближайшей точки при hover.
         self._times_cache = [t for t, _, _ in history]
         self._update_tooltip()
         self.repaint()
@@ -307,8 +439,6 @@ class PingGraphWidget(QWidget):
         self.setToolTip("<br>".join(lines))
 
     def _point_at_x(self, x):
-        """Возвращает (timestamp, success, latency) ближайшей записи к X-координате
-        или None, если истории нет."""
         if not self.history or not self._times_cache:
             return None
         if self.time_scale.zoom_periods:
@@ -319,9 +449,10 @@ class PingGraphWidget(QWidget):
         width = self.width()
         if visible_seconds <= 0 or width <= 0:
             return None
-        # X → time
-        cursor_time = visible_start + timedelta(seconds=x / width * visible_seconds)
-        # Бинарный поиск ближайшей записи
+        plot_x = self.LEFT_GUTTER if self.show_latency else 0
+        plot_w = max(1, width - plot_x)
+        rel_x = max(0, min(plot_w, x - plot_x))
+        cursor_time = visible_start + timedelta(seconds=rel_x / plot_w * visible_seconds)
         times = self._times_cache
         idx = bisect.bisect_left(times, cursor_time)
         if idx == 0:
@@ -334,16 +465,12 @@ class PingGraphWidget(QWidget):
         d_after = abs((after[0] - cursor_time).total_seconds())
         return before if d_before <= d_after else after
 
-
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            # Ищем HostWidget (класс ниже в этом же файле)
             parent = self.parent()
             while parent and not isinstance(parent, HostWidget):
                 parent = parent.parent()
             if parent:
-                # Ищем главное окно (PingMonitor) — по наличию метода,
-                # чтобы не тянуть импорт из main.py (иначе цикл).
                 main_window = parent.parent()
                 while main_window and not hasattr(main_window, 'move_host_to_queue_start'):
                     main_window = main_window.parent()
@@ -364,55 +491,206 @@ class PingGraphWidget(QWidget):
             self.update()
         super().leaveEvent(event)
 
+    def contextMenuEvent(self, event):
+        self.context_menu_requested.emit(self.host, event.globalPos())
+        event.accept()
 
     def paintEvent(self, event):
         if not self.history or not self.time_scale.start_time:
             return
-        painter = QPainter(self)
-        width = self.width()
-        height = self.height()
-        if self.time_scale.zoom_periods:
-            visible_start, visible_end = self.time_scale.zoom_periods[-1]
-        else:
-            visible_start, visible_end = self.time_scale.start_time, self.time_scale.end_time
-        visible_seconds = (visible_end - visible_start).total_seconds()
-        if visible_seconds <= 0:
-            return
-        pixels_per_second = width / visible_seconds
-        bar_width = max(1, min(self.BAR_WIDTH, int(pixels_per_second * 1)))
-        success_rects = []
-        failure_rects = []
-        last_success_pos = -1
-        last_failure_pos = -1
-        for ts, succ, _lat in self.history:
-            if ts < visible_start or ts > visible_end:
-                continue
-            pos = int((ts - visible_start).total_seconds() * pixels_per_second)
-            if succ:
-                if pos == last_success_pos:
-                    continue
-                last_success_pos = pos
-                success_rects.append(QRect(pos - bar_width // 2, 0, bar_width, height))
-            else:
-                if pos == last_failure_pos:
-                    continue
-                last_failure_pos = pos
-                failure_rects.append(QRect(pos - bar_width // 2, 0, bar_width, height))
-        if success_rects:
-            painter.setBrush(QColor("#4CAF50"))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRects(success_rects)
-        if failure_rects:
-            painter.setBrush(QColor("#F44336"))
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawRects(failure_rects)
-        if self._hover_pos is not None:
-            painter.setPen(QColor(60, 60, 60, 160))
-            painter.drawLine(self._hover_pos, 0, self._hover_pos, height)
 
+        p = palette()
+        painter = QPainter(self)
+        try:
+            width = self.width()
+            height = self.height()
+            if width <= 4 or height <= 4:
+                return
+
+            # --- Visible window ---
+            if self.time_scale.zoom_periods:
+                visible_start, visible_end = self.time_scale.zoom_periods[-1]
+            else:
+                visible_start, visible_end = self.time_scale.start_time, self.time_scale.end_time
+            visible_seconds = (visible_end - visible_start).total_seconds()
+            if visible_seconds <= 0:
+                return
+
+            # --- Geometry ---
+            if self.show_latency:
+                plot_x = self.LEFT_GUTTER
+                plot_y = self.TOP_MARGIN
+                plot_w = max(1, width - self.LEFT_GUTTER)
+                plot_h = max(1, height - self.TOP_MARGIN - self.BOTTOM_MARGIN)
+            else:
+                plot_x = 0
+                plot_y = 0
+                plot_w = width
+                plot_h = height
+
+            bottom_y = plot_y + plot_h
+            pixels_per_second = plot_w / visible_seconds
+
+            # --- Graph background (so empty regions are visibly distinct from bars) ---
+            painter.fillRect(plot_x, plot_y, plot_w, plot_h, p.graph_bg)
+
+            # --- Indices of visible records ---
+            visible_idx = [i for i, rec in enumerate(self.history)
+                           if visible_start <= rec[0] <= visible_end]
+            if not visible_idx:
+                return
+
+            # --- Gap threshold ---
+            # Estimate the per-host cadence from the MOST RECENT records,
+            # not from the whole visible window. Otherwise, when the user has
+            # changed the interval or added many hosts mid-session, the median
+            # is dominated by the dense old history and recent sparse checks
+            # are drawn as isolated bars ("gaps") even though monitoring ran
+            # continuously.
+            interval_s = max(0.1, self.check_interval_ms / 1000.0)
+            recent = self.history[-30:]
+            if len(recent) > 1:
+                dts = []
+                for k in range(1, len(recent)):
+                    dt = (recent[k][0] - recent[k - 1][0]).total_seconds()
+                    if dt > 0.01:
+                        dts.append(dt)
+                recent_median = sorted(dts)[len(dts) // 2] if dts else interval_s
+            else:
+                recent_median = interval_s
+            # Threshold: a gap is real if it exceeds 4× the recent typical
+            # interval. Floors: at least 5× the configured interval and 3 s.
+            gap_threshold_s = max(4.0 * recent_median, 5.0 * interval_s, 3.0)
+
+            def x_of(i):
+                ts = self.history[i][0]
+                return plot_x + int((ts - visible_start).total_seconds() * pixels_per_second)
+
+            def dt_to(i, j):
+                return abs((self.history[i][0] - self.history[j][0]).total_seconds())
+
+            # --- Y axis (grid + labels) ---
+            ymax = None
+            if self.show_latency:
+                lats = [self.history[i][2] for i in visible_idx
+                        if self.history[i][1]
+                        and self.history[i][2] is not None
+                        and self.history[i][2] >= 0]
+                ymax = _pick_ymax(lats)
+                self._current_ymax = ymax
+
+                painter.setFont(QFont("Arial", 7))
+                for val in _grid_values(ymax, density=self.height_mode):
+                    y = bottom_y - int(val / ymax * plot_h)
+                    painter.setPen(QPen(p.graph_grid, 1, Qt.PenStyle.DotLine))
+                    painter.drawLine(plot_x, y, width, y)
+                    painter.setPen(p.text_dim)
+                    painter.drawText(0, y - 8, plot_x - 6, 16,
+                                     Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
+                                     _format_ms(val))
+
+            # --- Full-height bars, "spliced" between adjacent checks ---
+            success_rects = []
+            failure_rects = []
+            n_vis = len(visible_idx)
+
+            for k, idx in enumerate(visible_idx):
+                ts, succ, lat = self.history[idx]
+                x_center = x_of(idx)
+
+                # Left edge: midpoint with the previous record, if the gap is small.
+                if k > 0:
+                    prev_idx = visible_idx[k - 1]
+                    if dt_to(idx, prev_idx) <= gap_threshold_s:
+                        x_left = (x_of(prev_idx) + x_center) // 2
+                    else:
+                        x_left = x_center - self.MIN_BAR_W // 2
+                else:
+                    # Look at the previous record outside the window
+                    if idx > 0 and dt_to(idx, idx - 1) <= gap_threshold_s:
+                        x_left = plot_x
+                    else:
+                        x_left = x_center - self.MIN_BAR_W // 2
+
+                # Right edge
+                if k < n_vis - 1:
+                    next_idx = visible_idx[k + 1]
+                    if dt_to(idx, next_idx) <= gap_threshold_s:
+                        x_right = (x_center + x_of(next_idx)) // 2
+                    else:
+                        x_right = x_center + self.MIN_BAR_W // 2 + 1
+                else:
+                    if idx < len(self.history) - 1 and dt_to(idx, idx + 1) <= gap_threshold_s:
+                        x_right = plot_x + plot_w
+                    else:
+                        x_right = x_center + self.MIN_BAR_W // 2 + 1
+
+                bw = max(1, x_right - x_left)
+                rect = QRect(x_left, plot_y, bw, plot_h)
+                if succ:
+                    success_rects.append(rect)
+                else:
+                    failure_rects.append(rect)
+
+            if success_rects:
+                painter.setBrush(p.graph_ok)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRects(success_rects)
+            if failure_rects:
+                painter.setBrush(p.graph_fail)
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.drawRects(failure_rects)
+
+            # --- Latency line on top of the bars, with breaks ---
+            if self.show_latency and ymax:
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.setPen(QPen(p.graph_avg, 1))
+                path = QPainterPath()
+                started = False
+                prev_idx = None
+                for idx in visible_idx:
+                    ts, succ, lat = self.history[idx]
+                    if not succ or lat is None or lat < 0:
+                        if started:
+                            painter.drawPath(path)
+                            path = QPainterPath()
+                            started = False
+                        prev_idx = None
+                        continue
+                    x = x_of(idx)
+                    y = bottom_y - int(min(lat, ymax) / ymax * plot_h)
+
+                    if prev_idx is not None and dt_to(idx, prev_idx) > gap_threshold_s:
+                        # Real gap
+                        if started:
+                            painter.drawPath(path)
+                        path = QPainterPath()
+                        path.moveTo(x, y)
+                        started = True
+                    elif not started:
+                        path.moveTo(x, y)
+                        started = True
+                    else:
+                        path.lineTo(x, y)
+                    prev_idx = idx
+                if started:
+                    painter.drawPath(path)
+
+            # --- Hover line ---
+            if self._hover_pos is not None:
+                painter.setBrush(Qt.BrushStyle.NoBrush)
+                painter.setPen(p.graph_hover)
+                painter.drawLine(self._hover_pos, 0, self._hover_pos, height)
+        finally:
+            painter.end()
+
+
+# ---------- Host widget ----------
 
 class HostWidget(QWidget):
-    """Виджет для отображения информации о хосте."""
+    """Widget that displays information about a single host."""
+
+    context_menu_requested = pyqtSignal(str, QPoint)   # host, global_pos
 
     def __init__(self, host, time_scale, app_start_time, category="Default"):
         super().__init__()
@@ -420,19 +698,21 @@ class HostWidget(QWidget):
         self.time_scale = time_scale
         self.category = category
         self.ping_history = []
+        self.loaded_days = set()
         self.consecutive_failures = 0
         self.check_type = 'icmp'
         self.port = None
         self.session_success_count = 0
         self.session_failure_count = 0
         self.app_start_time = app_start_time
-        self.retention_hours = 48       # обрезать старше часов
+        self.retention_hours = 48
         self.last_saved_time = None
         self.last_notified = None
         self.was_down = False
         self.disabled = False
-        self._last_prune = None          
-        self._prune_interval_sec = 300   # обрезать раз в 5 минут
+        self.muted = False
+        self._last_prune = None
+        self._prune_interval_sec = 300
 
         layout = QVBoxLayout()
         self.setLayout(layout)
@@ -443,6 +723,7 @@ class HostWidget(QWidget):
         self.graph_widget.update_history(
             self.ping_history, self.session_success_count, self.session_failure_count, self.app_start_time
         )
+        self.graph_widget.context_menu_requested.connect(self.context_menu_requested)
         layout.addWidget(self.host_label)
         layout.addWidget(self.graph_widget)
 
@@ -452,10 +733,14 @@ class HostWidget(QWidget):
         return "[i]"
 
     def update_host_label(self):
+        p = palette()
         txt = f"{self.host} {self.get_check_tag()}"
         if self.disabled:
             self.host_label.setText(f"{txt}  [disabled]")
-            self.host_label.setStyleSheet("color: gray;")
+            self.host_label.setStyleSheet(f"color: {p.text_disabled.name()};")
+        elif self.muted:
+            self.host_label.setText(f"{txt}  [muted]")
+            self.host_label.setStyleSheet(f"color: {p.text_muted.name()};")
         else:
             self.host_label.setText(txt)
             self.host_label.setStyleSheet("")
@@ -467,6 +752,10 @@ class HostWidget(QWidget):
 
     def set_disabled(self, disabled):
         self.disabled = disabled
+        self.update_host_label()
+
+    def set_muted(self, muted):
+        self.muted = bool(muted)
         self.update_host_label()
 
     def update_status(self, success, latency, current_time):

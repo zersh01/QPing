@@ -17,21 +17,28 @@ class PingManager(QObject):
     # host, success, latency_ms
     ping_result = pyqtSignal(str, bool, float)
 
-    def __init__(self, interval_ms, thread_pool):
+    def __init__(self, interval_ms, thread_pool, timeout_ms=0):
         super().__init__()
         self.interval_ms = interval_ms
+        self.timeout_ms = timeout_ms        # 0 -> auto
         self.thread_pool = thread_pool
 
+    def _effective_timeout_ms(self):
+        """Возвращает фактический таймаут в мс.
+        0 -> авто: max(1000, interval)"""
+        if self.timeout_ms > 0:
+            return max(100, self.timeout_ms)
+        return max(1000, self.interval_ms)
+
     def ping_host(self, host, check_type='icmp', port=None):
-        worker = PingWorker(host, self.interval_ms, check_type, port, self)
+        worker = PingWorker(host, self._effective_timeout_ms(), check_type, port, self)
         self.thread_pool.start(worker)
 
     def ping_icmp_batch(self, hosts):
-        """Один fping на весь список. Если fping недоступен — параллельные одиночные воркеры."""
         if not hosts:
             return
         if _FPING_PATH:
-            worker = FpingBatchWorker(hosts, self.interval_ms, self)
+            worker = FpingBatchWorker(hosts, self._effective_timeout_ms(), self)
             self.thread_pool.start(worker)
         else:
             for h in hosts:
@@ -40,16 +47,19 @@ class PingManager(QObject):
     def set_ping_interval(self, interval_ms):
         self.interval_ms = interval_ms
 
+    def set_ping_timeout(self, timeout_ms):
+        self.timeout_ms = max(0, int(timeout_ms))
+
     @pyqtSlot(str, bool, float)
     def emit_result(self, host, success, latency):
         self.ping_result.emit(host, success, latency)
 
 
 class PingWorker(QRunnable):
-    def __init__(self, host, interval_ms, check_type, port, manager):
+    def __init__(self, host, timeout_ms, check_type, port, manager):
         super().__init__()
         self.host = host
-        self.interval_ms = max(100, interval_ms)
+        self.timeout_ms = max(100, timeout_ms)
         self.check_type = check_type
         self.port = port
         self.manager = manager
@@ -58,7 +68,7 @@ class PingWorker(QRunnable):
     def run(self):
         success = False
         latency = -1.0
-        timeout_sec = max(1.0, self.interval_ms / 1000.0)
+        timeout_sec = self.timeout_ms / 1000.0
         try:
             if self.check_type == 'icmp':
                 success, latency = self._do_icmp(timeout_sec)
@@ -88,7 +98,6 @@ class PingWorker(QRunnable):
                 if alive_m and int(alive_m.group(1)) > 0:
                     lat = float(alive_m.group(2)) if alive_m.group(2) else 0.0
                     return True, lat
-                # Fallback default mode
                 m = re.search(r'([\d.]+)\s*ms', out)
                 if result.returncode == 0:
                     return True, float(m.group(1)) if m else 0.0
@@ -124,23 +133,22 @@ class PingWorker(QRunnable):
 
 
 class FpingBatchWorker(QRunnable):
-    """Запускает один fping-процесс на пачку ICMP-хостов."""
+    """fping batch."""
 
-    def __init__(self, hosts, interval_ms, manager):
+    def __init__(self, hosts, timeout_ms, manager):
         super().__init__()
         self.hosts = list(hosts)
-        self.interval_ms = max(100, interval_ms)
+        self.timeout_ms = max(100, timeout_ms)
         self.manager = manager
 
     @pyqtSlot()
     def run(self):
-        timeout_sec = max(1.0, self.interval_ms / 1000.0)
-        timeout_ms = max(100, int(timeout_sec * 1000))
+        timeout_sec = self.timeout_ms / 1000.0
+        timeout_ms = self.timeout_ms
         overall_timeout = timeout_sec + 3.0
 
         results = {h: (False, -1.0) for h in self.hosts}
         try:
-            # -c 1 -t <ms> → count mode: одна проба, таймаут на пакет
             cmd = [_FPING_PATH, "-c", "1", "-t", str(timeout_ms)] + self.hosts
             result = subprocess.run(cmd, timeout=overall_timeout,
                                     capture_output=True, text=True)
@@ -157,22 +165,10 @@ class FpingBatchWorker(QRunnable):
             )
 
     def _parse_lines(self, text, results):
-        """Поддерживает оба формата вывода fping:
-
-        1) Count mode (используется с -c N):
-             8.8.8.8 : xmt/rcv/%loss = 1/1/0%, min/avg/max = 20.8/20.8/20.8
-             1.1.1.1 : xmt/rcv/%loss = 1/0/100%
-
-        2) Default mode:
-             8.8.8.8 is alive (12.4 ms)
-             1.1.1.1 is unreachable
-        """
         for line in text.splitlines():
             line = line.strip()
             if not line:
                 continue
-
-            # --- Count mode: сводка xmt/rcv/%loss ---
             m = re.match(
                 r'^(\S+)\s*:\s*xmt/rcv/%loss\s*=\s*\d+/(\d+)/\d+%'
                 r'(?:\s*,\s*min/avg/max\s*=\s*[\d.]+/([\d.]+)/[\d.]+)?',
@@ -181,21 +177,17 @@ class FpingBatchWorker(QRunnable):
                 host = m.group(1)
                 rcv = int(m.group(2))
                 if rcv > 0:
-                    # group(3) может отсутствовать, если rcv=0 (тогда min/avg/max не выводятся)
                     latency = float(m.group(3)) if m.group(3) else 0.0
                     results[host] = (True, latency)
                 else:
                     results[host] = (False, -1.0)
                 continue
-
-            # --- Default mode: alive ---
             m = re.match(r'^(\S+)\s+is\s+alive\s+\(([\d.]+)\s*ms\)', line)
             if m:
                 results[m.group(1)] = (True, float(m.group(2)))
                 continue
-
-            # --- Default mode: unreachable ---
             m = re.match(r'^(\S+)\s+is\s+unreachable', line)
             if m:
                 results[m.group(1)] = (False, -1.0)
                 continue
+

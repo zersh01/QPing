@@ -7,8 +7,8 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-19 17:09+0300\n"
-"PO-Revision-Date: 2026-09-19 17:13+0300\n"
+"POT-Creation-Date: 2026-09-29 11:43+0300\n"
+"PO-Revision-Date: 2026-09-29 15:27+0300\n"
 "Last-Translator: zersh <zersh@mail.ru>\n"
 "Language-Team: English\n"
 "Language: en\n"
@@ -28,260 +28,438 @@ msgstr "<p>Monitor hosts via ICMP ping or TCP port check.</p>"
 
 #: help.py:17
 msgid ""
-"<h3>Keyboard shortcuts</h3><ul><li><b>Ctrl+N</b> — focus input field</"
-"li><li><b>Delete</b> — delete selected hosts</li><li><b>F2</b> — rename "
-"selected host</li><li><b>Esc</b> — clear search field if focused, otherwise "
-"minimize to tray</li><li><b>Ctrl+W</b> — close window</li><li><b>Ctrl+Q</b> "
-"— quit</li></ul>"
+"<h3>Keyboard shortcuts</h3><ul><li><b>Ctrl+F</b> — focus the search field</"
+"li><li><b>Ctrl+N</b> — focus the host input field</li><li><b>Ctrl+R</b> — "
+"cycle graph height (Compact → Normal → Expanded)</li><li><b>Ctrl+W</b> — "
+"hide window to tray</li><li><b>Ctrl+Q</b> — quit the application</"
+"li><li><b>F2</b> — rename the selected host</li><li><b>Delete</b> — delete "
+"the selected hosts</li><li><b>Esc</b> — clear the search field if focused, "
+"otherwise hide to tray</li></ul>"
 msgstr ""
-"<h3>Keyboard shortcuts</h3><ul><li><b>Ctrl+N</b> — focus input field</"
-"li><li><b>Delete</b> — delete selected hosts</li><li><b>F2</b> — rename "
-"selected host</li><li><b>Esc</b> — clear search field if focused, otherwise "
-"minimize to tray</li><li><b>Ctrl+W</b> — close window</li><li><b>Ctrl+Q</b> "
-"— quit</li></ul>"
+"<h3>Keyboard shortcuts</h3><ul><li><b>Ctrl+F</b> — focus the search field</"
+"li><li><b>Ctrl+N</b> — focus the host input field</li><li><b>Ctrl+R</b> — "
+"cycle graph height (Compact → Normal → Expanded)</li><li><b>Ctrl+W</b> — "
+"hide window to tray</li><li><b>Ctrl+Q</b> — quit the application</"
+"li><li><b>F2</b> — rename the selected host</li><li><b>Delete</b> — delete "
+"the selected hosts</li><li><b>Esc</b> — clear the search field if focused, "
+"otherwise hide to tray</li></ul>"
 
-#: help.py:27
+#: help.py:29
 msgid ""
-"<h3>Host management</h3><ul><li><b>Select</b>: click for single, Ctrl+click "
-"for multi, Shift+click for range.</li><li><b>Ping now</b>: check host "
-"immediately.</li><li><b>Disable monitoring</b>: stop checking the host; it "
-"remains in the list (gray). The state persists across restarts.</"
-"li><li><b>Clear History</b>: remove all records from memory and disk.</"
-"li><li><b>Load Full History</b>: load all archived records for viewing.</"
-"li><li><b>Search</b>: filter the host list by substring. Combined with 'Show "
-"Failed Hosts'.</li></ul>"
+"<h3>Host management</h3><ul><li><b>Select</b>: click for a single host, "
+"Ctrl+click for multiple, Shift+click for a range.</li><li><b>Ping now</b>: "
+"check the host immediately.</li><li><b>Disable monitoring</b>: stop checking "
+"the host; it stays in the list (gray). The state persists across restarts.</"
+"li><li><b>Mute notifications</b>: the host keeps being checked and its "
+"status/graph are updated, but tray notifications are suppressed. The state "
+"persists across restarts.</li><li><b>Clear History</b>: remove all records "
+"from memory and disk.</li><li><b>Load Full History</b>: load all archived "
+"records for viewing.</li><li><b>Set Category</b>: assign the host to a "
+"category or create a new one.</li><li><b>Rename (F2)</b>: the history "
+"directory is moved together with the host.</li><li><b>Drag &amp; drop</b>: "
+"reorder hosts inside a category or move them between categories.</"
+"li><li><b>Search</b>: filter the host list by substring. Combined with the "
+"active filter mode.</li></ul>"
 msgstr ""
-"<h3>Host management</h3><ul><li><b>Select</b>: click for single, Ctrl+click "
-"for multi, Shift+click for range.</li><li><b>Ping now</b>: check host "
-"immediately.</li><li><b>Disable monitoring</b>: stop checking the host; it "
-"remains in the list (gray). The state persists across restarts.</"
-"li><li><b>Clear History</b>: remove all records from memory and disk.</"
-"li><li><b>Load Full History</b>: load all archived records for viewing.</"
-"li><li><b>Search</b>: filter the host list by substring. Combined with 'Show "
-"Failed Hosts'.</li></ul>"
+"<h3>Host management</h3><ul><li><b>Select</b>: click for a single host, "
+"Ctrl+click for multiple, Shift+click for a range.</li><li><b>Ping now</b>: "
+"check the host immediately.</li><li><b>Disable monitoring</b>: stop checking "
+"the host; it stays in the list (gray). The state persists across restarts.</"
+"li><li><b>Mute notifications</b>: the host keeps being checked and its "
+"status/graph are updated, but tray notifications are suppressed. The state "
+"persists across restarts.</li><li><b>Clear History</b>: remove all records "
+"from memory and disk.</li><li><b>Load Full History</b>: load all archived "
+"records for viewing.</li><li><b>Set Category</b>: assign the host to a "
+"category or create a new one.</li><li><b>Rename (F2)</b>: the history "
+"directory is moved together with the host.</li><li><b>Drag &amp; drop</b>: "
+"reorder hosts inside a category or move them between categories.</"
+"li><li><b>Search</b>: filter the host list by substring. Combined with the "
+"active filter mode.</li></ul>"
 
-#: help.py:38
+#: help.py:45
+msgid ""
+"<h3>Filter modes</h3><p>The filter button (in the toolbar) cycles through: "
+"<b>All</b> → <b>Failed</b> → <b>Warn</b> → <b>Disabled</b>.</"
+"p><ul><li><b>All</b> — show every host.</li><li><b>Failed</b> — only hosts "
+"with consecutive failures ≥ alert threshold.</li><li><b>Warn</b> — only "
+"hosts with 1 ≤ failures &lt; alert threshold.</li><li><b>Disabled</b> — only "
+"disabled or muted hosts.</li></ul><p>You can also click the <b>Warn</b>, "
+"<b>Down</b> or <b>Disabled</b> counter in the summary bar to switch to that "
+"filter in one click. Click the active counter again to return to <b>All</b>."
+"</p>"
+msgstr ""
+"<h3>Filter modes</h3><p>The filter button (in the toolbar) cycles through: "
+"<b>All</b> → <b>Failed</b> → <b>Warn</b> → <b>Disabled</b>.</"
+"p><ul><li><b>All</b> — show every host.</li><li><b>Failed</b> — only hosts "
+"with consecutive failures ≥ alert threshold.</li><li><b>Warn</b> — only "
+"hosts with 1 ≤ failures &lt; alert threshold.</li><li><b>Disabled</b> — only "
+"disabled or muted hosts.</li></ul><p>You can also click the <b>Warn</b>, "
+"<b>Down</b> or <b>Disabled</b> counter in the summary bar to switch to that "
+"filter in one click. Click the active counter again to return to <b>All</b>."
+"</p>"
+
+#: help.py:57
+msgid ""
+"<h3>Graphs</h3><p>Solid bars represent each check (green = success, red = "
+"failure). When <b>Show latency scale</b> is enabled, bars grow from the "
+"baseline up to the measured latency and a thin line connects the tops of "
+"successful checks. Long pauses between checks are left blank so it is clear "
+"that no monitoring took place.</p><ul><li><b>Graph height</b>: Compact (50 "
+"px) / Normal (80 px) / Expanded (200 px). Change it in Settings → General, "
+"via Ctrl+R, or from the right-click menu on any graph.</li><li><b>Zoom</b>: "
+"scroll wheel over the time scale — zoom in/out around the cursor.</"
+"li><li><b>Select period</b>: drag on the time scale to zoom into that range."
+"</li><li><b>Reset zoom</b>: right-click on the time scale.</"
+"li><li><b>Prioritize</b>: double-click a graph to move that host to the "
+"front of the queue.</li><li><b>Right-click</b> on a graph — same context "
+"menu as on the tree.</li></ul>"
+msgstr ""
+"<h3>Graphs</h3><p>Solid bars represent each check (green = success, red = "
+"failure). When <b>Show latency scale</b> is enabled, bars grow from the "
+"baseline up to the measured latency and a thin line connects the tops of "
+"successful checks. Long pauses between checks are left blank so it is clear "
+"that no monitoring took place.</p><ul><li><b>Graph height</b>: Compact (50 "
+"px) / Normal (80 px) / Expanded (200 px). Change it in Settings → General, "
+"via Ctrl+R, or from the right-click menu on any graph.</li><li><b>Zoom</b>: "
+"scroll wheel over the time scale — zoom in/out around the cursor.</"
+"li><li><b>Select period</b>: drag on the time scale to zoom into that range."
+"</li><li><b>Reset zoom</b>: right-click on the time scale.</"
+"li><li><b>Prioritize</b>: double-click a graph to move that host to the "
+"front of the queue.</li><li><b>Right-click</b> on a graph — same context "
+"menu as on the tree.</li></ul>"
+
+#: help.py:72
 msgid ""
 "<h3>Batch fping</h3><p>If <code>fping</code> is installed, ICMP hosts are "
-"checked in batches of the size configured in Settings → General. Every timer "
-"tick a batch of ICMP hosts and one TCP host are checked.</p>"
+"checked in batches of the size configured in Settings → General. On each "
+"timer tick a batch of ICMP hosts and one TCP host are checked.</p>"
 msgstr ""
 "<h3>Batch fping</h3><p>If <code>fping</code> is installed, ICMP hosts are "
-"checked in batches of the size configured in Settings → General. Every timer "
-"tick a batch of ICMP hosts and one TCP host are checked.</p>"
+"checked in batches of the size configured in Settings → General. On each "
+"timer tick a batch of ICMP hosts and one TCP host are checked.</p>"
 
-#: help.py:43
+#: help.py:77
 msgid ""
-"<h3>Alerts</h3><p>Configure threshold, reminder interval and recovery "
-"notifications in Application → Settings → Alerts.</p>"
+"<h3>Alerts and notifications</h3><p>Threshold, reminder interval and "
+"recovery notifications are configured in Application → Settings → Alerts.</"
+"p><p>Tray notifications are grouped within a 2-second window: if several "
+"hosts go down at the same time, you receive a single aggregated notification "
+"(e.g. &quot;5 hosts are not responding&quot;).</p><p>The tray icon shows a "
+"red badge with the number of currently failed hosts. A yellow icon indicates "
+"that at least one host is in the warning state.</p>"
 msgstr ""
-"<h3>Alerts</h3><p>Configure threshold, reminder interval and recovery "
-"notifications in Application → Settings → Alerts.</p>"
+"<h3>Alerts and notifications</h3><p>Threshold, reminder interval and "
+"recovery notifications are configured in Application → Settings → Alerts.</"
+"p><p>Tray notifications are grouped within a 2-second window: if several "
+"hosts go down at the same time, you receive a single aggregated notification "
+"(e.g. &quot;5 hosts are not responding&quot;).</p><p>The tray icon shows a "
+"red badge with the number of currently failed hosts. A yellow icon indicates "
+"that at least one host is in the warning state.</p>"
 
-#: help.py:47
+#: help.py:86
+msgid ""
+"<h3>Appearance</h3><p>In Settings → General you can choose <b>Auto</b> "
+"(follow the system theme), <b>Light</b> or <b>Dark</b>. In Auto mode the "
+"theme is switched automatically when the system color scheme changes.</p>"
+msgstr ""
+"<h3>Appearance</h3><p>In Settings → General you can choose <b>Auto</b> "
+"(follow the system theme), <b>Light</b> or <b>Dark</b>. In Auto mode the "
+"theme is switched automatically when the system color scheme changes.</p>"
+
+#: help.py:91
+msgid ""
+"<h3>Language</h3><p>The Language menu is built automatically from the "
+"compiled translations available under <code>translations/&lt;code&gt;/"
+"LC_MESSAGES/qping.mo</code>. To add a new language, place the compiled "
+"<code>.mo</code> file in the appropriate folder — no code change is needed.</"
+"p>"
+msgstr ""
+"<h3>Language</h3><p>The Language menu is built automatically from the "
+"compiled translations available under <code>translations/&lt;code&gt;/"
+"LC_MESSAGES/qping.mo</code>. To add a new language, place the compiled "
+"<code>.mo</code> file in the appropriate folder — no code change is needed.</"
+"p>"
+
+#: help.py:97
 msgid ""
 "<h3>Storage</h3><p>History: <code>~/.config/QPing/history/&lt;host&gt;/YYYY-"
-"MM-DD.jsonl</code>.<br>Auto-cleanup in Application → Settings → Storage.</p>"
+"MM-DD.jsonl</code>.<br>Only the last hour is loaded on startup; older days "
+"are fetched on demand when you scroll the time scale into the past.<br>Auto-"
+"cleanup is configured in Application → Settings → Storage.</p>"
 msgstr ""
 "<h3>Storage</h3><p>History: <code>~/.config/QPing/history/&lt;host&gt;/YYYY-"
-"MM-DD.jsonl</code>.<br>Auto-cleanup in Application → Settings → Storage.</p>"
+"MM-DD.jsonl</code>.<br>Only the last hour is loaded on startup; older days "
+"are fetched on demand when you scroll the time scale into the past.<br>Auto-"
+"cleanup is configured in Application → Settings → Storage.</p>"
 
-#: help.py:51
+#: help.py:103
 msgid ""
 "<h3>Hooks</h3><p>External scripts triggered on host down/up transitions. See "
-"Settings → Hooks.</p>"
+"Settings → Hooks. Environment variables passed to the scripts: "
+"<code>QPING_HOST</code>, <code>QPING_STATUS</code> (down/up), "
+"<code>QPING_FAILURES</code>, <code>QPING_TIMESTAMP</code>.</p>"
 msgstr ""
 "<h3>Hooks</h3><p>External scripts triggered on host down/up transitions. See "
-"Settings → Hooks.</p>"
+"Settings → Hooks. Environment variables passed to the scripts: "
+"<code>QPING_HOST</code>, <code>QPING_STATUS</code> (down/up), "
+"<code>QPING_FAILURES</code>, <code>QPING_TIMESTAMP</code>.</p>"
 
-#: help.py:55
+#: help.py:109
 msgid ""
 "<h3>Ansible inventory import</h3><p>Import → select <code>.ini</code> or "
-"<code>.yml</code>/<code>.yaml</code>. Groups become categories; ansible_host "
-"overrides hostname.</p>"
+"<code>.yml</code>/<code>.yaml</code>. Groups become categories; "
+"<code>ansible_host</code> overrides the inventory hostname.</p>"
 msgstr ""
 "<h3>Ansible inventory import</h3><p>Import → select <code>.ini</code> or "
-"<code>.yml</code>/<code>.yaml</code>. Groups become categories; ansible_host "
-"overrides hostname.</p>"
+"<code>.yml</code>/<code>.yaml</code>. Groups become categories; "
+"<code>ansible_host</code> overrides the inventory hostname.</p>"
 
-#: main.py:191
+#: help.py:113
+msgid ""
+"<h3>Backup and restore</h3><p>Application → Export Hosts saves the full list "
+"(hosts, categories, check types, disabled and muted flags) into a <code>."
+"qping.json</code> file. Import with the same extension restores or merges "
+"the list.</p>"
+msgstr ""
+"<h3>Backup and restore</h3><p>Application → Export Hosts saves the full list "
+"(hosts, categories, check types, disabled and muted flags) into a <code>."
+"qping.json</code> file. Import with the same extension restores or merges "
+"the list.</p>"
+
+#: main.py:244
 msgid "QPing Monitor"
 msgstr "QPing Monitor"
 
-#: main.py:575 main.py:1065
+#: main.py:783 main.py:1615
 msgid "Application"
 msgstr "Application"
 
-#: main.py:577 main.py:1066
+#: main.py:785 main.py:1616
 msgid "Settings..."
 msgstr "Settings..."
 
-#: main.py:581 main.py:1067
+#: main.py:789 main.py:1617
 msgid "Export Hosts..."
 msgstr "Export Hosts..."
 
-#: main.py:585 main.py:1068
+#: main.py:793 main.py:1618
 msgid "Import Hosts..."
 msgstr "Import Hosts..."
 
-#: main.py:591 main.py:1069
+#: main.py:799 main.py:1619
 msgid "Close"
 msgstr "Close"
 
-#: main.py:598 main.py:623 main.py:1070 main.py:1081
+#: main.py:806 main.py:843 main.py:1620 main.py:1636
 msgid "Quit"
 msgstr "Quit"
 
-#: main.py:604 main.py:1072
+#: main.py:812 main.py:1622
 msgid "Help"
 msgstr "Help"
 
-#: main.py:605 main.py:1020 main.py:1073
+#: main.py:813 main.py:1465 main.py:1623
 msgid "User Guide"
 msgstr "User Guide"
 
-#: main.py:610 main.py:1075
+#: main.py:817 main.py:1624
+msgid "About"
+msgstr "About"
+
+#: main.py:825 main.py:1626
 msgid "Language"
 msgstr "Language"
 
-#: main.py:620 main.py:1080 main.py:1493
+#: main.py:840 main.py:1635 main.py:2190
 msgid "Restore"
 msgstr "Restore"
 
-#: main.py:632 main.py:1046
+#: main.py:852 main.py:1600
 msgid "Enter IP/domain"
 msgstr "Enter IP/domain"
 
-#: main.py:634 main.py:1048
+#: main.py:854 main.py:1602
 msgid "Add Host"
 msgstr "Add Host"
 
-#: main.py:636 main.py:1049 main.py:1150
+#: main.py:856 main.py:1603 main.py:1735
 msgid "Import from File"
 msgstr "Import from File"
 
-#: main.py:642 main.py:1050 main.py:1808
+#: main.py:862 main.py:1604 main.py:2534
 msgid "Interval: {}ms"
 msgstr "Interval: {}ms"
 
-#: main.py:644 main.py:974 main.py:1052
+#: main.py:864 main.py:1395 main.py:1606
 msgid "Notifications: On"
 msgstr "Notifications: On"
 
-#: main.py:645 main.py:975 main.py:1053
+#: main.py:865 main.py:1396 main.py:1607
 msgid "Notifications: Off"
 msgstr "Notifications: Off"
 
-#: main.py:649 main.py:982 main.py:1056
-msgid "Show Failed Hosts"
-msgstr "Show Failed Hosts"
+#: main.py:869
+msgid "Cycle filter: All → Failed → Warn"
+msgstr "Cycle filter: All → Failed → Warn"
 
-#: main.py:650 main.py:983 main.py:1057
-msgid "Show All Hosts"
-msgstr "Show All Hosts"
-
-#: main.py:653 main.py:1060
+#: main.py:872 main.py:1611
 msgid "Interval:"
 msgstr "Interval:"
 
-#: main.py:691 main.py:1062
+#: main.py:891
+msgid "Click to show only warning hosts"
+msgstr "Click to show only warning hosts"
+
+#: main.py:894
+msgid "Click to show only down hosts"
+msgstr "Click to show only down hosts"
+
+#: main.py:897
+msgid "Click to show disabled and muted hosts"
+msgstr "Click to show disabled and muted hosts"
+
+#: main.py:918 main.py:1613
 msgid "Monitored Hosts:"
 msgstr "Monitored Hosts:"
 
-#: main.py:699 main.py:1047
+#: main.py:926 main.py:1601
 msgid "Search host..."
 msgstr "Search host..."
 
-#: main.py:705
+#: main.py:932
 msgid "Expand all groups"
 msgstr "Expand all groups"
 
-#: main.py:711
+#: main.py:938
 msgid "Collapse all groups"
 msgstr "Collapse all groups"
 
-#: main.py:791
+#: main.py:1086
 msgid "Settings"
 msgstr "Settings"
 
-#: main.py:803
+#: main.py:1096
+msgid "Auto (follow system)"
+msgstr "Auto (follow system)"
+
+#: main.py:1097
+msgid "Light"
+msgstr "Light"
+
+#: main.py:1098
+msgid "Dark"
+msgstr "Dark"
+
+#: main.py:1102
+msgid "Appearance:"
+msgstr "Appearance:"
+
+#: main.py:1109
 msgid "hours"
 msgstr "hours"
 
-#: main.py:803
+#: main.py:1109
 msgid "days"
 msgstr "days"
 
-#: main.py:807
+#: main.py:1113
 msgid "Keep history for:"
 msgstr "Keep history for:"
 
-#: main.py:808
+#: main.py:1115
 msgid "Minimize to tray on Escape"
 msgstr "Minimize to tray on Escape"
 
-#: main.py:816
+#: main.py:1124
+msgid "Auto (follows interval)"
+msgstr "Auto (follows interval)"
+
+#: main.py:1125
+msgid "Response timeout:"
+msgstr "Response timeout:"
+
+#: main.py:1131
 msgid "fping batch size (hosts per call):"
 msgstr "fping batch size (hosts per call):"
 
-#: main.py:818
+#: main.py:1133
 msgid "fping not found — batch size has no effect."
 msgstr "fping not found — batch size has no effect."
 
-#: main.py:821
+#: main.py:1137
+msgid "Show latency scale on graphs"
+msgstr "Show latency scale on graphs"
+
+#: main.py:1142
+msgid "Compact (50px)"
+msgstr "Compact (50px)"
+
+#: main.py:1143
+msgid "Normal (80px)"
+msgstr "Normal (80px)"
+
+#: main.py:1144
+msgid "Expanded (200px)"
+msgstr "Expanded (200px)"
+
+#: main.py:1148
+msgid "Graph height:"
+msgstr "Graph height:"
+
+#: main.py:1150
 msgid "General"
 msgstr "General"
 
-#: main.py:827
+#: main.py:1156
 msgid "Alert after N consecutive failures:"
 msgstr "Alert after N consecutive failures:"
 
-#: main.py:831
+#: main.py:1160
 msgid "Remind every:"
 msgstr "Remind every:"
 
-#: main.py:832
+#: main.py:1161
 msgid "Notify when host recovers"
 msgstr "Notify when host recovers"
 
-#: main.py:835
+#: main.py:1164
 msgid "Alerts"
 msgstr "Alerts"
 
-#: main.py:839
+#: main.py:1168
 msgid "Auto-cleanup old history files"
 msgstr "Auto-cleanup old history files"
 
-#: main.py:845
+#: main.py:1174
 msgid "Delete archives older than:"
 msgstr "Delete archives older than:"
 
-#: main.py:846
+#: main.py:1175
 msgid "Files are deleted from ~/.config/QPing/history/. This cannot be undone."
 msgstr ""
 "Files are deleted from ~/.config/QPing/history/. This cannot be undone."
 
-#: main.py:849
+#: main.py:1179
 msgid "Storage"
 msgstr "Storage"
 
-#: main.py:853
+#: main.py:1183
 msgid "Enable event hooks"
 msgstr "Enable event hooks"
 
-#: main.py:859
+#: main.py:1189
 msgid "Choose directory..."
 msgstr "Choose directory..."
 
-#: main.py:861
+#: main.py:1191
 msgid "Hooks directory"
 msgstr "Hooks directory"
 
-#: main.py:865
+#: main.py:1195
 msgid "Hooks directory:"
 msgstr "Hooks directory:"
 
-#: main.py:868
+#: main.py:1198
 msgid ""
 "Scripts: on_host_down.sh and on_host_up.sh (must be executable).\n"
 "Environment variables: QPING_HOST, QPING_STATUS (down/up), QPING_FAILURES, "
@@ -291,290 +469,416 @@ msgstr ""
 "Environment variables: QPING_HOST, QPING_STATUS (down/up), QPING_FAILURES, "
 "QPING_TIMESTAMP."
 
-#: main.py:873
+#: main.py:1204
 msgid "Hooks"
 msgstr "Hooks"
 
-#: main.py:1096
-msgid "Delete Category '{}'"
-msgstr "Delete Category '{}'"
-
-#: main.py:1107
-msgid "Edit (F2)"
-msgstr "Edit (F2)"
-
-#: main.py:1111
-msgid "Delete (Del)"
-msgstr "Delete (Del)"
-
-#: main.py:1114
-msgid "Ping now"
-msgstr "Ping now"
-
-#: main.py:1118
-msgid "Enable monitoring"
-msgstr "Enable monitoring"
-
-#: main.py:1118
-msgid "Disable monitoring"
-msgstr "Disable monitoring"
-
-#: main.py:1122
-msgid "Check Type"
-msgstr "Check Type"
-
-#: main.py:1123
-msgid "ICMP Ping"
-msgstr "ICMP Ping"
-
-#: main.py:1124 main.py:1263
-msgid "TCP Port"
-msgstr "TCP Port"
-
-#: main.py:1130 main.py:1221
-msgid "Set Category"
-msgstr "Set Category"
-
-#: main.py:1133 main.py:1323
-msgid "Clear History"
-msgstr "Clear History"
-
-#: main.py:1136 main.py:1363 main.py:1370
-msgid "Load Full History"
-msgstr "Load Full History"
-
-#: main.py:1188 main.py:1204
-msgid "Delete Category"
-msgstr "Delete Category"
-
-#: main.py:1189
-msgid "Category '{}' contains {} hosts. What would you like to do?"
-msgstr "Category '{}' contains {} hosts. What would you like to do?"
-
-#: main.py:1190
-msgid "Move hosts to Default"
-msgstr "Move hosts to Default"
-
-#: main.py:1191
-msgid "Delete all hosts"
-msgstr "Delete all hosts"
-
-#: main.py:1205
-msgid "Delete empty category '{}'?"
-msgstr "Delete empty category '{}'?"
-
-#: main.py:1226 main.py:1237 main.py:1239
-msgid "New Category"
-msgstr "New Category"
-
-#: main.py:1229
-msgid "Enter new category name"
-msgstr "Enter new category name"
-
-#: main.py:1264
-msgid "Enter port number (1-65535):"
-msgstr "Enter port number (1-65535):"
-
-#: main.py:1301
-msgid "Delete"
-msgstr "Delete"
-
-#: main.py:1302
-msgid "Delete {} hosts?"
-msgstr "Delete {} hosts?"
-
-#: main.py:1324
-msgid ""
-"Delete all history for {} host(s)?\n"
-"\n"
-"This erases in-memory records and deletes all saved files in ~/.config/QPing/"
-"history/ for the selected host(s)."
-msgstr ""
-"Delete all history for {} host(s)?\n"
-"\n"
-"This erases in-memory records and deletes all saved files in ~/.config/QPing/"
-"history/ for the selected host(s)."
-
-#: main.py:1364
-msgid "No history files found for host {}."
-msgstr "No history files found for host {}."
-
-#: main.py:1371
-msgid "History loaded ({} records). Zoom out to see older data."
-msgstr "History loaded ({} records). Zoom out to see older data."
-
-#: main.py:1416
-msgid "Import hosts"
-msgstr "Import hosts"
-
-#: main.py:1417
-msgid ""
-"Supported (*.ini *.yml *.yaml *.txt *.qping.json hosts);;Ansible INI (*."
-"ini);;Ansible YAML (*.yml *.yaml);;Hosts file (hosts);;Text list (*.txt);;"
-"QPing backup (*.qping.json);;All files (*)"
-msgstr ""
-"Supported (*.ini *.yml *.yaml *.txt *.qping.json hosts);;Ansible INI (*."
-"ini);;Ansible YAML (*.yml *.yaml);;Hosts file (hosts);;Text list (*.txt);;"
-"QPing backup (*.qping.json);;All files (*)"
-
-#: main.py:1427
-msgid "Import error"
-msgstr "Import error"
-
-#: main.py:1444 main.py:1453 main.py:1487
-msgid "Import"
-msgstr "Import"
-
-#: main.py:1445
-msgid "YAML parsing requires PyYAML. Install with: pip install pyyaml"
-msgstr "YAML parsing requires PyYAML. Install with: pip install pyyaml"
-
-#: main.py:1453
-msgid "No hosts found."
-msgstr "No hosts found."
-
-#: main.py:1484
-msgid "Import completed"
-msgstr "Import completed"
-
-#: main.py:1485
-msgid "Successfully added {} hosts."
-msgstr "Successfully added {} hosts."
-
-#: main.py:1487
-msgid "No new hosts added."
-msgstr "No new hosts added."
-
-#: main.py:1494
-msgid "Invalid QPing backup file."
-msgstr "Invalid QPing backup file."
-
-#: main.py:1498
-msgid "Restore from backup"
-msgstr "Restore from backup"
-
-#: main.py:1499
-msgid ""
-"Backup contains {} host(s).\n"
-"\n"
-"What would you like to do?"
-msgstr ""
-"Backup contains {} host(s).\n"
-"\n"
-"What would you like to do?"
-
-#: main.py:1501
-msgid "Replace current list"
-msgstr "Replace current list"
-
-#: main.py:1503
-msgid "Merge with current"
-msgstr "Merge with current"
-
-#: main.py:1547
-msgid "Restore completed"
-msgstr "Restore completed"
-
-#: main.py:1548
-msgid "Restored {} hosts."
-msgstr "Restored {} hosts."
-
-#: main.py:1553
-msgid "Export hosts"
-msgstr "Export hosts"
-
-#: main.py:1555
-msgid "QPing backup (*.qping.json);;JSON (*.json);;All files (*)"
-msgstr "QPing backup (*.qping.json);;JSON (*.json);;All files (*)"
-
-#: main.py:1586
-msgid "Export error"
-msgstr "Export error"
-
-#: main.py:1589
-msgid "Export completed"
-msgstr "Export completed"
-
-#: main.py:1590
-msgid ""
-"Exported {} hosts to:\n"
-"{}"
-msgstr ""
-"Exported {} hosts to:\n"
-"{}"
-
-#: main.py:1760
-msgid "Host recovered"
-msgstr "Host recovered"
-
-#: main.py:1761
-msgid "Host {} is responding again"
-msgstr "Host {} is responding again"
-
-#: main.py:1778
+#: main.py:1337
 msgid "Host unavailable"
 msgstr "Host unavailable"
 
-#: main.py:1779
-msgid "Host {} is not responding ({} failures)"
-msgstr "Host {} is not responding ({} failures)"
+#: main.py:1338
+msgid "Host {} is not responding"
+msgstr "Host {} is not responding"
 
-#: main.py:1817
+#: main.py:1340
+msgid "Hosts unavailable"
+msgstr "Hosts unavailable"
+
+#: main.py:1341
+msgid ""
+"{} hosts are not responding:\n"
+"{}"
+msgstr ""
+"{} hosts are not responding:\n"
+"{}"
+
+#: main.py:1349
+msgid "Host recovered"
+msgstr "Host recovered"
+
+#: main.py:1350
+msgid "Host {} is responding again"
+msgstr "Host {} is responding again"
+
+#: main.py:1352
+msgid "Hosts recovered"
+msgstr "Hosts recovered"
+
+#: main.py:1353
+msgid ""
+"{} hosts are responding again:\n"
+"{}"
+msgstr ""
+"{} hosts are responding again:\n"
+"{}"
+
+#: main.py:1413
+msgid "Filter: All"
+msgstr "Filter: All"
+
+#: main.py:1414
+msgid "Filter: Failed"
+msgstr "Filter: Failed"
+
+#: main.py:1415
+msgid "Filter: Warn"
+msgstr "Filter: Warn"
+
+#: main.py:1416
+msgid "Filter: Disabled"
+msgstr "Filter: Disabled"
+
+#: main.py:1514
+msgid "About QPing"
+msgstr "About QPing"
+
+#: main.py:1535
+msgid "Network host monitor with ICMP ping and TCP port checks."
+msgstr "Network host monitor with ICMP ping and TCP port checks."
+
+#: main.py:1539
+msgid "Author: {}"
+msgstr "Author: {}"
+
+#: main.py:1551
+msgid "License: MIT"
+msgstr "License: MIT"
+
+#: main.py:1559
+msgid "Changelog:"
+msgstr "Changelog:"
+
+#: main.py:1571
+msgid ""
+"Changelog is not available.\n"
+"\n"
+"When installed from a .deb package, the file is located at:\n"
+"  /usr/share/doc/qping/changelog.Debian.gz"
+msgstr ""
+"Changelog is not available.\n"
+"\n"
+"When installed from a .deb package, the file is located at:\n"
+"  /usr/share/doc/qping/changelog.Debian.gz"
+
+#: main.py:1661
+msgid "Delete Category '{}'"
+msgstr "Delete Category '{}'"
+
+#: main.py:1672
+msgid "Edit (F2)"
+msgstr "Edit (F2)"
+
+#: main.py:1676
+msgid "Delete (Del)"
+msgstr "Delete (Del)"
+
+#: main.py:1679
+msgid "Ping now"
+msgstr "Ping now"
+
+#: main.py:1683
+msgid "Enable monitoring"
+msgstr "Enable monitoring"
+
+#: main.py:1683
+msgid "Disable monitoring"
+msgstr "Disable monitoring"
+
+#: main.py:1691
+msgid "Mute notifications"
+msgstr "Mute notifications"
+
+#: main.py:1691
+msgid "Unmute notifications"
+msgstr "Unmute notifications"
+
+#: main.py:1695
+msgid "Check Type"
+msgstr "Check Type"
+
+#: main.py:1696
+msgid "ICMP Ping"
+msgstr "ICMP Ping"
+
+#: main.py:1697 main.py:1858
+msgid "TCP Port"
+msgstr "TCP Port"
+
+#: main.py:1703
+msgid "Graph height"
+msgstr "Graph height"
+
+#: main.py:1704
+msgid "Compact"
+msgstr "Compact"
+
+#: main.py:1705
+msgid "Normal"
+msgstr "Normal"
+
+#: main.py:1706
+msgid "Expanded"
+msgstr "Expanded"
+
+#: main.py:1713 main.py:1816
+msgid "Set Category"
+msgstr "Set Category"
+
+#: main.py:1716 main.py:1920
+msgid "Clear History"
+msgstr "Clear History"
+
+#: main.py:1719 main.py:1971 main.py:1975
+msgid "Load Full History"
+msgstr "Load Full History"
+
+#: main.py:1783 main.py:1799
+msgid "Delete Category"
+msgstr "Delete Category"
+
+#: main.py:1784
+msgid "Category '{}' contains {} hosts. What would you like to do?"
+msgstr "Category '{}' contains {} hosts. What would you like to do?"
+
+#: main.py:1785
+msgid "Move hosts to Default"
+msgstr "Move hosts to Default"
+
+#: main.py:1786
+msgid "Delete all hosts"
+msgstr "Delete all hosts"
+
+#: main.py:1800
+msgid "Delete empty category '{}'?"
+msgstr "Delete empty category '{}'?"
+
+#: main.py:1821 main.py:1832 main.py:1834
+msgid "New Category"
+msgstr "New Category"
+
+#: main.py:1824
+msgid "Enter new category name"
+msgstr "Enter new category name"
+
+#: main.py:1859
+msgid "Enter port number (1-65535):"
+msgstr "Enter port number (1-65535):"
+
+#: main.py:1898
+msgid "Delete"
+msgstr "Delete"
+
+#: main.py:1899
+msgid "Delete {} hosts?"
+msgstr "Delete {} hosts?"
+
+#: main.py:1921
+msgid ""
+"Delete all history for {} host(s)?\n"
+"\n"
+"This erases in-memory records and deletes all saved files in ~/.config/QPing/"
+"history/ for the selected host(s)."
+msgstr ""
+"Delete all history for {} host(s)?\n"
+"\n"
+"This erases in-memory records and deletes all saved files in ~/.config/QPing/"
+"history/ for the selected host(s)."
+
+#: main.py:1972
+msgid "Loading history for {} host(s) in background."
+msgstr "Loading history for {} host(s) in background."
+
+#: main.py:1976
+msgid "No additional history to load."
+msgstr "No additional history to load."
+
+#: main.py:2119
+msgid "Import hosts"
+msgstr "Import hosts"
+
+#: main.py:2120
+msgid ""
+"Supported (*.ini *.yml *.yaml *.txt *.qping.json hosts);;Ansible INI (*."
+"ini);;Ansible YAML (*.yml *.yaml);;Hosts file (hosts);;Text list (*.txt);;"
+"QPing backup (*.qping.json);;All files (*)"
+msgstr ""
+"Supported (*.ini *.yml *.yaml *.txt *.qping.json hosts);;Ansible INI (*."
+"ini);;Ansible YAML (*.yml *.yaml);;Hosts file (hosts);;Text list (*.txt);;"
+"QPing backup (*.qping.json);;All files (*)"
+
+#: main.py:2130
+msgid "Import error"
+msgstr "Import error"
+
+#: main.py:2145 main.py:2154 main.py:2185
+msgid "Import"
+msgstr "Import"
+
+#: main.py:2146
+msgid "YAML parsing requires PyYAML. Install with: pip install pyyaml"
+msgstr "YAML parsing requires PyYAML. Install with: pip install pyyaml"
+
+#: main.py:2154
+msgid "No hosts found."
+msgstr "No hosts found."
+
+#: main.py:2182
+msgid "Import completed"
+msgstr "Import completed"
+
+#: main.py:2183
+msgid "Successfully added {} hosts."
+msgstr "Successfully added {} hosts."
+
+#: main.py:2185
+msgid "No new hosts added."
+msgstr "No new hosts added."
+
+#: main.py:2191
+msgid "Invalid QPing backup file."
+msgstr "Invalid QPing backup file."
+
+#: main.py:2195
+msgid "Restore from backup"
+msgstr "Restore from backup"
+
+#: main.py:2196
+msgid ""
+"Backup contains {} host(s).\n"
+"\n"
+"What would you like to do?"
+msgstr ""
+"Backup contains {} host(s).\n"
+"\n"
+"What would you like to do?"
+
+#: main.py:2198
+msgid "Replace current list"
+msgstr "Replace current list"
+
+#: main.py:2200
+msgid "Merge with current"
+msgstr "Merge with current"
+
+#: main.py:2244
+msgid "Restore completed"
+msgstr "Restore completed"
+
+#: main.py:2245
+msgid "Restored {} hosts."
+msgstr "Restored {} hosts."
+
+#: main.py:2249
+msgid "Export hosts"
+msgstr "Export hosts"
+
+#: main.py:2251
+msgid "QPing backup (*.qping.json);;JSON (*.json);;All files (*)"
+msgstr "QPing backup (*.qping.json);;JSON (*.json);;All files (*)"
+
+#: main.py:2283
+msgid "Export error"
+msgstr "Export error"
+
+#: main.py:2286
+msgid "Export completed"
+msgstr "Export completed"
+
+#: main.py:2287
+msgid ""
+"Exported {} hosts to:\n"
+"{}"
+msgstr ""
+"Exported {} hosts to:\n"
+"{}"
+
+#: main.py:2598 main.py:2604
 msgid "Edit"
 msgstr "Edit"
 
-#: main.py:1817
+#: main.py:2599
 msgid "New host name:"
 msgstr "New host name:"
 
-#: ping_widgets.py:275
-msgid "OK"
-msgstr "OK"
+#: main.py:2605
+msgid "Host '{}' already exists."
+msgstr "Host '{}' already exists."
 
-#: ping_widgets.py:275
-msgid "FAIL"
-msgstr "FAIL"
+#~ msgid ""
+#~ "<h3>Keyboard shortcuts</h3><ul><li><b>Ctrl+N</b> — focus input field</"
+#~ "li><li><b>Delete</b> — delete selected hosts</li><li><b>F2</b> — rename "
+#~ "selected host</li><li><b>Esc</b> — clear search field if focused, "
+#~ "otherwise minimize to tray</li><li><b>Ctrl+W</b> — close window</"
+#~ "li><li><b>Ctrl+Q</b> — quit</li></ul>"
+#~ msgstr ""
+#~ "<h3>Keyboard shortcuts</h3><ul><li><b>Ctrl+N</b> — focus input field</"
+#~ "li><li><b>Delete</b> — delete selected hosts</li><li><b>F2</b> — rename "
+#~ "selected host</li><li><b>Esc</b> — clear search field if focused, "
+#~ "otherwise minimize to tray</li><li><b>Ctrl+W</b> — close window</"
+#~ "li><li><b>Ctrl+Q</b> — quit</li></ul>"
 
-#: ping_widgets.py:281
-msgid "Status: <b>{}</b>   Latency: <b>{}</b>"
-msgstr "Status: <b>{}</b>   Latency: <b>{}</b>"
+#~ msgid ""
+#~ "<h3>Alerts</h3><p>Configure threshold, reminder interval and recovery "
+#~ "notifications in Application → Settings → Alerts.</p>"
+#~ msgstr ""
+#~ "<h3>Alerts</h3><p>Configure threshold, reminder interval and recovery "
+#~ "notifications in Application → Settings → Alerts.</p>"
 
-#: ping_widgets.py:285
-msgid "Start time: {}"
-msgstr "Start time: {}"
+#~ msgid ""
+#~ "<h3>Hooks</h3><p>External scripts triggered on host down/up transitions. "
+#~ "See Settings → Hooks.</p>"
+#~ msgstr ""
+#~ "<h3>Hooks</h3><p>External scripts triggered on host down/up transitions. "
+#~ "See Settings → Hooks.</p>"
 
-#: ping_widgets.py:286
-msgid "Successful checks: {}"
-msgstr "Successful checks: {}"
+#~ msgid "Show Failed Hosts"
+#~ msgstr "Show Failed Hosts"
 
-#: ping_widgets.py:287
-msgid "Failed checks: {}"
-msgstr "Failed checks: {}"
+#~ msgid "Show All Hosts"
+#~ msgstr "Show All Hosts"
 
-#: ping_widgets.py:288
-msgid "Failure rate: {:.1f}%"
-msgstr "Failure rate: {:.1f}%"
+#~ msgid "No history files found for host {}."
+#~ msgstr "No history files found for host {}."
 
-#: ping_widgets.py:289
-msgid "Records in memory: {}"
-msgstr "Records in memory: {}"
+#~ msgid "History loaded ({} records). Zoom out to see older data."
+#~ msgstr "History loaded ({} records). Zoom out to see older data."
 
-#: ping_widgets.py:293
-msgid "--- Latency all time (ms) ---"
-msgstr "--- Latency all time (ms) ---"
+#~ msgid "OK"
+#~ msgstr "OK"
 
-#: ping_widgets.py:296 ping_widgets.py:302
-msgid "Jitter: {:.2f}"
-msgstr "Jitter: {:.2f}"
+#~ msgid "FAIL"
+#~ msgstr "FAIL"
 
-#: ping_widgets.py:299
-msgid "--- Last {} min (n={}) ---"
-msgstr "--- Last {} min (n={}) ---"
+#~ msgid "Status: <b>{}</b>   Latency: <b>{}</b>"
+#~ msgstr "Status: <b>{}</b>   Latency: <b>{}</b>"
 
-#: ping_widgets.py:304
-msgid "--- Last {} min ---"
-msgstr "--- Last {} min ---"
+#~ msgid "Start time: {}"
+#~ msgstr "Start time: {}"
 
-#: ping_widgets.py:305
-msgid "No data"
-msgstr "No data"
+#~ msgid "Successful checks: {}"
+#~ msgstr "Successful checks: {}"
+
+#~ msgid "Failed checks: {}"
+#~ msgstr "Failed checks: {}"
+
+#~ msgid "Failure rate: {:.1f}%"
+#~ msgstr "Failure rate: {:.1f}%"
+
+#~ msgid "Records in memory: {}"
+#~ msgstr "Records in memory: {}"
+
+#~ msgid "--- Latency all time (ms) ---"
+#~ msgstr "--- Latency all time (ms) ---"
+
+#~ msgid "Jitter: {:.2f}"
+#~ msgstr "Jitter: {:.2f}"
+
+#~ msgid "--- Last {} min (n={}) ---"
+#~ msgstr "--- Last {} min (n={}) ---"
+
+#~ msgid "--- Last {} min ---"
+#~ msgstr "--- Last {} min ---"
+
+#~ msgid "No data"
+#~ msgstr "No data"

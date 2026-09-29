@@ -1,9 +1,9 @@
 # utils.py
 """
-Утилиты и константы QPing.
+QPing utilities and constants.
 
-Никаких зависимостей от PyQt6 — чистые функции и stdlib.
-Можно импортировать из тестов, CLI-скриптов и т.п.
+No PyQt6 dependencies — pure functions and stdlib only.
+Safe to import from tests, CLI scripts, etc.
 """
 import os
 import re
@@ -13,16 +13,57 @@ import json
 from datetime import datetime, timedelta
 
 
-# --- Пути ---
+# --- Paths ---
 CONFIG_DIR = os.environ.get("QPING_CONFIG_DIR") or os.path.expanduser("~/.config/QPing")
 HISTORY_DIR = os.path.join(CONFIG_DIR, "history")
 HOOKS_DIR_DEFAULT = os.path.join(CONFIG_DIR, "hooks")
 
-# Старый путь истории (для миграции)
-OLD_HISTORY_FILE = os.path.expanduser("~/.ping_monitor_history.json")
+
+# --- Localization ---
+# ---------- Language auto-discovery ----------
+
+def discover_languages():
+    """Scan translations/ and return the list of available languages.
+
+    Returns a list of (code, display_name) tuples, sorted so that English
+    comes first (fallback), the rest alphabetically by code. A language is
+    considered available when the file
+    translations/<code>/LC_MESSAGES/qping.mo exists.
+
+    If the translations/ directory is missing, returns [("en", "English")].
+    """
+    localedir = os.path.join(os.path.dirname(__file__), 'translations')
+    if not os.path.isdir(localedir):
+        return [("en", "English")]
+    result = []
+    try:
+        entries = sorted(os.listdir(localedir))
+    except OSError:
+        return [("en", "English")]
+    for entry in entries:
+        path = os.path.join(localedir, entry, "LC_MESSAGES", "qping.mo")
+        if os.path.isfile(path):
+            result.append((entry, _lang_display_name(entry)))
+    if not result:
+        return [("en", "English")]
+    # English first (neutral language), the rest alphabetically.
+    result.sort(key=lambda x: (x[0] != "en", x[0]))
+    return result
 
 
-# --- Локализация ---
+def _lang_display_name(code):
+    """Human-readable language name. Uses QLocale when PyQt6 is available,
+    otherwise falls back to the upper-cased code ('FR', 'DE', …)."""
+    try:
+        from PyQt6.QtCore import QLocale
+        loc = QLocale(code)
+        name = loc.nativeLanguageName()
+        if name:
+            return name[:1].upper() + name[1:]
+    except Exception:
+        pass
+    return code.upper()
+
 
 def setup_localization(lang):
     localedir = os.path.join(os.path.dirname(__file__), 'translations')
@@ -47,7 +88,7 @@ def read_int_setting(settings, key, default):
         return default
 
 
-# --- Хосты ---
+# --- Hosts ---
 
 def host_safe_name(host):
     h = hashlib.sha1(host.encode('utf-8')).hexdigest()[:8]
@@ -57,7 +98,7 @@ def host_safe_name(host):
     return f"{safe}_{h}"
 
 
-# --- Статистика ---
+# --- Statistics ---
 
 def percentile(sorted_vals, p):
     if not sorted_vals:
@@ -68,14 +109,14 @@ def percentile(sorted_vals, p):
 
 
 def compute_latency_stats(history):
-    """history: list of (datetime, success, latency_ms). Возвращает dict или None."""
+    """history: list of (datetime, success, latency_ms). Returns a dict or None."""
     lats = [lat for (_, s, lat) in history if s and lat is not None and lat >= 0]
     if not lats:
         return None
     lats_sorted = sorted(lats)
     n = len(lats_sorted)
     mean = sum(lats_sorted) / n
-    # Population standard deviation — стандартная аппроксимация jitter.
+    # Population standard deviation — the standard jitter approximation.
     variance = sum((x - mean) ** 2 for x in lats_sorted) / n if n > 0 else 0.0
     stdev = variance ** 0.5
     return {
@@ -88,17 +129,19 @@ def compute_latency_stats(history):
         'stdev': stdev,
     }
 
+
 def compute_recent_stats(history, minutes=5):
-    """Статистика за последние `minutes` минут. Возвращает dict или None."""
+    """Statistics for the last `minutes` minutes. Returns a dict or None."""
     cutoff = datetime.now() - timedelta(minutes=minutes)
     recent = [(t, s, lat) for (t, s, lat) in history if t >= cutoff]
     return compute_latency_stats(recent)
 
+
 # --- Ansible inventory ---
 
 def parse_ansible_ini(content):
-    """Ansible INI inventory. Возвращает {group: [host, ...]}.
-    Использует ПЕРВОЕ поле как имя хоста."""
+    """Ansible INI inventory. Returns {group: [host, ...]}.
+    Uses the FIRST field as the host name."""
     groups = {}
     current_group = None
     for raw_line in content.splitlines():
@@ -124,7 +167,7 @@ def parse_ansible_ini(content):
 
 
 def parse_ansible_yaml(content):
-    """YAML-инвентарь (требует PyYAML). Возвращает dict или None."""
+    """YAML inventory (requires PyYAML). Returns a dict or None."""
     try:
         import yaml
     except ImportError:
@@ -157,10 +200,11 @@ def parse_ansible_yaml(content):
     walk(data, "all")
     return groups
 
-# ---------- Парсеры импорта ----------
+
+# ---------- Import parsers ----------
 
 def _looks_like_ip(s):
-    """Грубая проверка: строка похожа на IPv4 или IPv6."""
+    """Rough check: does the string look like an IPv4 or IPv6 address?"""
     parts = s.split('.')
     if len(parts) == 4:
         try:
@@ -174,8 +218,8 @@ def _looks_like_ip(s):
 
 
 def parse_hosts_file(content):
-    """Формат /etc/hosts: 'IP hostname [aliases...]'.
-    Берём ВТОРОЕ поле — имя хоста. Все хосты идут в группу Default."""
+    """Format /etc/hosts: 'IP hostname [aliases...]'.
+    Takes the SECOND field as the host name. All hosts go to the Default group."""
     hosts = []
     for raw_line in content.splitlines():
         line = raw_line.split('#', 1)[0].strip()
@@ -190,7 +234,7 @@ def parse_hosts_file(content):
 
 
 def parse_plain_list(content):
-    """Построчный список: одна строка — одно имя хоста."""
+    """Line-by-line list: one line per host name."""
     hosts = []
     for raw_line in content.splitlines():
         line = raw_line.split('#', 1)[0].strip()
@@ -200,7 +244,7 @@ def parse_plain_list(content):
 
 
 def parse_backup(content):
-    """QPing backup JSON. Возвращает {host: {category, check_type, port, disabled}} или None."""
+    """QPing backup JSON. Returns {host: {category, check_type, port, disabled, muted}} or None."""
     try:
         data = json.loads(content)
     except Exception:
@@ -219,12 +263,13 @@ def parse_backup(content):
             'check_type': h.get('check_type', 'icmp'),
             'port': h.get('port'),
             'disabled': bool(h.get('disabled', False)),
+            'muted': bool(h.get('muted', False)),
         }
     return result
 
 
 def build_backup(hosts_data):
-    """hosts_data: list of dicts с ключами host, category, check_type, port, disabled."""
+    """hosts_data: list of dicts with keys host, category, check_type, port, disabled, muted."""
     return {
         'format': 'qping-backup',
         'version': 1,
@@ -234,7 +279,7 @@ def build_backup(hosts_data):
 
 
 def detect_import_format(filename, content):
-    """Определяет формат файла: 'backup', 'ansible_ini', 'ansible_yaml', 'hosts', 'plain'."""
+    """Detect the file format: 'backup', 'ansible_ini', 'ansible_yaml', 'hosts', 'plain'."""
     base = os.path.basename(filename).lower()
     ext = os.path.splitext(filename)[1].lower()
 
@@ -242,17 +287,17 @@ def detect_import_format(filename, content):
     if base.endswith('.qping.json') or ext == '.qping':
         return 'backup'
 
-    # По расширению
+    # By extension
     if ext == '.ini':
         return 'ansible_ini'
     if ext in ('.yml', '.yaml'):
         return 'ansible_yaml'
 
-    # /etc/hosts — файл без расширения с именем "hosts" или "hosts.*"
+    # /etc/hosts — extensionless file named "hosts" or "hosts.*"
     if base == 'hosts' or base.startswith('hosts.'):
         return 'hosts'
 
-    # Автодетект содержимого: JSON-бэкап
+    # Content autodetect: JSON backup
     stripped = content.lstrip()
     if stripped.startswith('{'):
         try:
@@ -262,17 +307,17 @@ def detect_import_format(filename, content):
         except Exception:
             pass
 
-    # Секции [xxx] → ansible ini
+    # [xxx] sections → ansible ini
     for line in content.splitlines()[:50]:
         s = line.strip()
         if s.startswith('[') and s.endswith(']'):
             return 'ansible_ini'
 
-    # YAML-признаки
+    # YAML markers
     if re.search(r'^\s*(all|children)\s*:', content, re.MULTILINE):
         return 'ansible_yaml'
 
-    # /etc/hosts-подобное: строки "IP hostname [aliases]"
+    # /etc/hosts-like: lines "IP hostname [aliases]"
     ip_count = 0
     line_count = 0
     for line in content.splitlines()[:20]:
