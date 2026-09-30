@@ -3,7 +3,7 @@
 QPing — main window. Run
 
 """
-APP_VERSION = "2.0"
+APP_VERSION = "2.4"
 
 import sys
 import json
