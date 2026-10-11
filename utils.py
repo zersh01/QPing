@@ -97,6 +97,37 @@ def host_safe_name(host):
         safe = "host"
     return f"{safe}_{h}"
 
+def parse_host_spec(spec):
+    """Parse a host specification entered by the user.
+
+    Accepted forms:
+        "example.com"          -> ("example.com", None)
+        "example.com:443"      -> ("example.com", 443)
+        "example.com 80"       -> ("example.com", 80)
+
+    Returns (host, port) where port is None or in 1..65535.
+    Raises ValueError for empty input or out-of-range ports.
+    """
+    spec = spec.strip()
+    if not spec:
+        raise ValueError("empty host spec")
+
+    m = re.match(
+        r'^(?P<host>[^:\s]+)'
+        r'(?:[:](?P<p1>\d{1,5})|\s+(?P<p2>\d{1,5}))?$',
+        spec)
+    if not m:
+        raise ValueError(f"cannot parse host spec: {spec!r}")
+
+    host = m.group('host')
+    port_str = m.group('p1') or m.group('p2')
+    if port_str is None:
+        return host, None
+
+    port = int(port_str)
+    if not (1 <= port <= 65535):
+        raise ValueError(f"port out of range: {port}")
+    return host, port
 
 # --- Statistics ---
 

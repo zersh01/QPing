@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# QPing installer v2.4
+# QPing installer v2.5
 # Устанавливает .desktop-файл в меню приложений и на рабочий стол.
 # Иконка берётся из рабочего каталога: $SCRIPT_DIR/qping.svg
 
 set -e
 
 APP_NAME="QPing"
-APP_VERSION="2.4"
+APP_VERSION="2.5"
 APP_ID="qping"
 
 # --- Определяем рабочий каталог (где лежит этот скрипт) ---

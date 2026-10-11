@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # QPing launcher — robust startup with automatic discovery of a python
 # interpreter that has PyQt6 installed.
-# Error log: ~/.config/QPing/qping.log
+# Logging is handled by qp_logging.setup_logging() in Python:
+#   ~/.config/QPing/qping.log (rotated at 1 MB, 3 backups).
 # Required for the .desktop shortcuts.
 
 cd "$(dirname "$(readlink -f "$0")")" || exit 1
 
-LOG="$HOME/.config/QPing/qping.log"
-mkdir -p "$(dirname "$LOG")"
+mkdir -p "$HOME/.config/QPing"
 
 # Find a python with PyQt6, in priority order:
 #   1. the user's myenv (current installation)
@@ -29,11 +29,10 @@ do
 done
 
 if [ -z "$PY" ]; then
-    echo "[$(date '+%F %T')] ERROR: python3 with PyQt6 not found." >> "$LOG"
-    echo "  Checked: ~/myenv, ./venv, ./.venv, ~/.local/bin, /usr/bin" >> "$LOG"
-    echo "  Install PyQt6: pip install PyQt6" >> "$LOG"
+    echo "ERROR: python3 with PyQt6 not found." >&2
+    echo "  Checked: ~/myenv, ./venv, ./.venv, ~/.local/bin, /usr/bin" >&2
+    echo "  Install PyQt6: pip install PyQt6" >&2
     exit 1
 fi
 
-echo "[$(date '+%F %T')] START $PY qping $*" >> "$LOG"
-exec "$PY" qping "$@" 2>>"$LOG"
+exec "$PY" qping "$@"

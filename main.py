@@ -3,7 +3,7 @@
 QPing — main window. Run
 
 """
-APP_VERSION = "2.4"
+APP_VERSION = "2.5"
 
 import sys
 import json
@@ -11,6 +11,7 @@ import os
 import shutil
 import subprocess
 import gzip
+import logging
 
 from datetime import datetime, timedelta
 from PyQt6.QtWidgets import (
@@ -30,7 +31,7 @@ from PyQt6.QtGui import (
     QKeySequence, QPainter, QFontMetrics
 )
 
-from ping_manager import PingManager, PingWorker, has_fping
+from ping_manager import PingManager, PingWorker, TcpProbeWorker, has_fping
 from ping_widgets import TimeScaleWidget, HostWidget, PingGraphWidget
 from theme import palette, apply_theme
 from utils import (
@@ -38,9 +39,13 @@ from utils import (
     setup_localization, read_bool_setting, read_int_setting, host_safe_name,
     detect_import_format, parse_ansible_ini, parse_ansible_yaml,
     parse_hosts_file, parse_plain_list, parse_backup, build_backup,
-    discover_languages,
+    discover_languages, parse_host_spec,
 )
 
+from qp_logging import setup_logging
+
+
+log = logging.getLogger(__name__)
 
 class ClickableLabel(QLabel):
     """QLabel that reacts to a left mouse click. Signal `clicked`."""
@@ -90,7 +95,7 @@ class SaveWorker(QRunnable):
                             f.write(json.dumps([t.isoformat(), s, lat]) + "\n")
                 result[host] = latest
             except Exception as e:
-                print(f"[save] error for {host}: {e}")
+                log.error("save error for %s: %s", host, e)
                 result[host] = None
         try:
             self.signals.finished.emit(result)
@@ -120,8 +125,7 @@ class HookWorker(QRunnable):
                 check=False,
             )
         except Exception as e:
-            print(f"[hook] {self.script_path}: {e}")
-
+            log.warning("hook %s: %s", self.script_path, e)
 
 # ---------- Per-day history loading ----------
 
@@ -168,7 +172,7 @@ def read_history_days(host_dir, day_strs):
                     if latest_time is None or t > latest_time:
                         latest_time = t
         except Exception as e:
-            print(f"Error reading {path}: {e}")
+            log.error("read history %s: %s", path, e)
     records.sort(key=lambda x: x[0])
     return records, latest_time
 
@@ -214,6 +218,10 @@ class DayLoadWorker(QRunnable):
 # ---------- Main window ----------
 
 class PingMonitor(QMainWindow):
+    AUTO_DETECT_AFTER_FAILURES = 5
+    AUTO_DETECT_MIN_AGE_SEC = 10
+    AUTO_DETECT_PORTS = (443, 80, 22)
+
     def __init__(self):
         super().__init__()
         os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -269,6 +277,20 @@ class PingMonitor(QMainWindow):
 
         self.fping_batch_size = max(1, read_int_setting(self.settings, "fping_batch_size", 5))
         self.ping_timeout_ms = max(0, read_int_setting(self.settings, "ping_timeout_ms", 0))
+
+        # --- Auto-detect check type ---
+        # Default: propose TCP when a freshly added host never answers ICMP.
+        # "add" limits this to hosts added in the current session, so existing
+        # hosts are not touched on upgrade. Users can switch to "always" or
+        # "off" in Settings.
+        self.auto_detect_mode = self.settings.value("auto_detect_mode", "add")
+        if self.auto_detect_mode not in ("off", "add", "always"):
+            self.auto_detect_mode = "add"
+        self._auto_detect_done = set()
+        self._auto_detect_in_progress = set()
+        self._had_icmp_success = set()
+        self._auto_detect_queue = []
+        self._auto_detect_dialog_open = False
 
         self.search_text = ""
 
@@ -339,6 +361,12 @@ class PingMonitor(QMainWindow):
         self.thread_pool.setMaxThreadCount(10)
         self.hook_pool = QThreadPool()
         self.hook_pool.setMaxThreadCount(2)
+        # Separate pool for auto-detect TCP probes. Keeping them off the
+        # main pool prevents a burst of slow probes (2 s each) from starving
+        # regular pings, save workers and day loads when many hosts go down
+        # at once.
+        self.auto_detect_pool = QThreadPool()
+        self.auto_detect_pool.setMaxThreadCount(2)
 
         self._save_in_progress = False
         self._save_workers = set()
@@ -504,7 +532,7 @@ class PingMonitor(QMainWindow):
     def _host_dir(self, host):
         return os.path.join(HISTORY_DIR, host_safe_name(host))
 
-    def _make_host_widget(self, host, category):
+    def _make_host_widget(self, host, category, added_this_session=False):
         """Create a HostWidget with the current settings applied."""
         w = HostWidget(host, self.time_scale, self.app_start_time, category)
         w.retention_hours = self.retention_hours
@@ -512,6 +540,7 @@ class PingMonitor(QMainWindow):
         w.graph_widget.set_check_interval(self.interval_slider.value())
         w.graph_widget.set_graph_height_mode(self.graph_height_mode)
         w.context_menu_requested.connect(self._on_host_context_menu_from_graph)
+        w.added_this_session = added_this_session
         return w
 
     def create_icon(self, color):
@@ -541,6 +570,10 @@ class PingMonitor(QMainWindow):
     def quit_application(self):
         self.is_quitting = True
         self._save_data_sync()
+        # Wait for TCP probes to finish so their queued signals do not fire
+        # into a torn-down window. Probing is bounded (~6 s worst case), and
+        # we only block briefly to avoid hanging the quit.
+        self.auto_detect_pool.waitForDone(2000)
         QApplication.quit()
 
     def closeEvent(self, event):
@@ -1147,6 +1180,15 @@ class PingMonitor(QMainWindow):
             height_combo.setCurrentIndex(idx)
         gl.addRow(self._("Graph height:"), height_combo)
 
+        auto_detect_combo = QComboBox()
+        auto_detect_combo.addItem(self._("Off"), "off")
+        auto_detect_combo.addItem(self._("Only for hosts added this session"), "add")
+        auto_detect_combo.addItem(self._("Always"), "always")
+        idx = auto_detect_combo.findData(self.auto_detect_mode)
+        if idx >= 0:
+            auto_detect_combo.setCurrentIndex(idx)
+        gl.addRow(self._("Auto-detect check type:"), auto_detect_combo)
+
         tabs.addTab(general, self._("General"))
 
         alerts = QWidget()
@@ -1271,6 +1313,11 @@ class PingMonitor(QMainWindow):
             self.settings.setValue("hooks_enabled", self.hooks_enabled)
             self.settings.setValue("hooks_dir", self.hooks_dir)
 
+            new_ad = auto_detect_combo.currentData()
+            if new_ad != self.auto_detect_mode:
+                self.auto_detect_mode = new_ad
+                self.settings.setValue("auto_detect_mode", new_ad)
+
             self.update_all_graphs()
             self.update_status_panel()
 
@@ -1381,11 +1428,11 @@ class PingMonitor(QMainWindow):
                             os.remove(os.path.join(host_dir, fname))
                             removed += 1
                         except OSError as e:
-                            print(f"[cleanup] {fname}: {e}")
+                            log.warning("cleanup %s: %s", fname, e)
         except Exception as e:
-            print(f"[cleanup] {e}")
+            log.error("cleanup: %s", e)
         if removed:
-            print(f"[cleanup] Removed {removed} old history files")
+            log.info("cleanup removed %d old files", removed)
 
     # ---------- Notifications / filter ----------
 
@@ -1505,7 +1552,7 @@ class PingMonitor(QMainWindow):
                     with open(path, "r", encoding="utf-8", errors="replace") as f:
                         return f.read()
             except Exception as e:
-                print(f"[about] Failed to read {path}: {e}")
+                log.warning("about: failed to read %s: %s", path, e)
         return None
 
     def show_about(self):
@@ -1976,7 +2023,6 @@ class PingMonitor(QMainWindow):
                 self._("No additional history to load."))
 
     # ---------- Per-day history on-demand loading ----------
-
     def on_zoom_changed(self):
         if not self.host_widgets:
             return
@@ -2064,7 +2110,7 @@ class PingMonitor(QMainWindow):
             loaded_total += len(data['records'])
 
         if loaded_total:
-            print(f"[history] Loaded {loaded_total} records for {len(result)} host(s)")
+            log.info("history loaded %d records for %d host(s)", loaded_total, len(result))
         self.update_all_graphs()
         self.apply_filter()
 
@@ -2131,7 +2177,7 @@ class PingMonitor(QMainWindow):
             return
 
         fmt = detect_import_format(file_name, content)
-        print(f"[import] file={file_name} format={fmt}")
+        log.info("import file=%s format=%s", file_name, fmt)
 
         if fmt == 'backup':
             self._restore_backup(content)
@@ -2158,17 +2204,33 @@ class PingMonitor(QMainWindow):
 
     def _add_hosts_from_groups(self, groups):
         added = 0
+        skipped = 0
         for group, hosts_list in groups.items():
             cat = group if group else "Default"
             if cat not in self.categories_list:
                 self.categories_list.append(cat)
-            for h in hosts_list:
-                h = h.strip()
-                if not h or h in self.host_widgets:
+            for raw in hosts_list:
+                raw = raw.strip()
+                if not raw:
                     continue
-                w = self._make_host_widget(h, cat)
-                self.host_widgets[h] = w
-                self._load_single_host_history(h, w)
+                try:
+                    host, port = parse_host_spec(raw)
+                except ValueError:
+                    skipped += 1
+                    continue
+                if host in self.host_widgets:
+                    continue
+                w = self._make_host_widget(host, cat, added_this_session=True)
+                self.host_widgets[host] = w
+                self.host_check_types.setdefault(
+                    host, {'type': 'icmp', 'port': None})
+                self._load_single_host_history(host, w)
+                if port is not None:
+                    self.host_check_types[host] = {'type': 'tcp', 'port': port}
+                    w.set_check_type('tcp', port)
+                else:
+                    info = self.host_check_types[host]
+                    w.set_check_type(info.get('type', 'icmp'), info.get('port'))
                 added += 1
 
         if added > 0:
@@ -2179,10 +2241,13 @@ class PingMonitor(QMainWindow):
             self.update_host_queue()
             if not self.ping_timer.isActive():
                 self.start_pinging()
-            QMessageBox.information(self, self._("Import completed"),
-                                    self._("Successfully added {} hosts.").format(added))
+            msg = self._("Successfully added {} hosts.").format(added)
+            if skipped:
+                msg += "\n" + self._("Skipped {} invalid entries.").format(skipped)
+            QMessageBox.information(self, self._("Import completed"), msg)
         else:
             QMessageBox.warning(self, self._("Import"), self._("No new hosts added."))
+
 
     def _restore_backup(self, content):
         data = parse_backup(content)
@@ -2484,7 +2549,15 @@ class PingMonitor(QMainWindow):
                 return
             consecutive = w.update_status(success, latency, current_time)
 
+            # Compute new status and log transitions only.
+            new_status = self._status_of(w)
+            if new_status != w._last_status:
+                self._log_status_transition(host, w._last_status, new_status,
+                                            consecutive, latency)
+                w._last_status = new_status
+
             if success:
+                self._had_icmp_success.add(host)
                 if w.was_down:
                     w.was_down = False
                     self.fire_hook("up", host, failures=0)
@@ -2504,31 +2577,189 @@ class PingMonitor(QMainWindow):
                                 or (current_time - last).total_seconds()
                                     >= self.alert_reminder_minutes * 60):
                             w.last_notified = current_time
-                            print(f"[notify] host={host} fails={consecutive}")
+                            log.info("notify host=%s fails=%d", host, consecutive)
                             self._queue_notification("down", host, consecutive)
+                self._maybe_start_auto_detect(host, w, consecutive)
 
         self.update_app_icon()
         if host in self.host_widgets:
             self._set_host_color(host)
         self.apply_filter()
 
+    def _status_of(self, w):
+        """Classify the host's current status for logging purposes."""
+        if w.disabled:
+            return "disabled"
+        if w.muted:
+            return "muted"
+        cf = w.consecutive_failures
+        if cf >= self.alerts_after_failures:
+            return "down"
+        if cf >= 1:
+            return "warn"
+        return "ok"
+
+    def _log_status_transition(self, host, old, new, consecutive, latency):
+        """Emit a single INFO line per status change."""
+        if new == "down":
+            log.info("status %s: %s -> down (fails=%d)", host, old, consecutive)
+        elif new == "warn":
+            log.info("status %s: %s -> warn (fails=%d)", host, old, consecutive)
+        elif new == "ok":
+            log.info("status %s: %s -> ok (latency=%.1f ms)", host, old, latency)
+        else:
+            log.info("status %s: %s -> %s", host, old, new)
+
+
+    def _maybe_start_auto_detect(self, host, w, consecutive):
+        if self.auto_detect_mode == "off":
+            return
+        if host in self._auto_detect_done or host in self._auto_detect_in_progress:
+            return
+        if consecutive < self.AUTO_DETECT_AFTER_FAILURES:
+            return
+        if w.check_type != 'icmp':
+            return
+        if host in self._had_icmp_success:
+            return
+        if self.auto_detect_mode == "add" and not w.added_this_session:
+            return
+        if w.added_at is None:
+            return
+        age = (datetime.now() - w.added_at).total_seconds()
+        if age < self.AUTO_DETECT_MIN_AGE_SEC:
+            return
+
+        self._auto_detect_in_progress.add(host)
+        timeout_sec = max(1.0, min(2.0, self.ping_manager._effective_timeout_ms() / 1000.0))
+        worker = TcpProbeWorker(host, self.AUTO_DETECT_PORTS, timeout_sec)
+        worker.signals.finished.connect(self._on_auto_detect_finished)
+        self.auto_detect_pool.start(worker)
+
+    @pyqtSlot(str, dict)
+    def _on_auto_detect_finished(self, host, results):
+        self._auto_detect_in_progress.discard(host)
+        self._auto_detect_done.add(host)
+
+        if host not in self.host_widgets:
+            return
+        if host in self._had_icmp_success:
+            return
+
+        for port in self.AUTO_DETECT_PORTS:
+            success, _ = results.get(port, (False, -1.0))
+            if success:
+                self._show_auto_detect_banner(host, port)
+                return
+
+    def _show_auto_detect_banner(self, host, port):
+        self._auto_detect_queue.append((host, port))
+        if not self._auto_detect_dialog_open:
+            self._show_next_auto_detect_dialog()
+
+    def _show_next_auto_detect_dialog(self):
+        if not self._auto_detect_queue:
+            self._auto_detect_dialog_open = False
+            return
+        self._auto_detect_dialog_open = True
+        host, port = self._auto_detect_queue.pop(0)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(self._("Auto-detect check type"))
+        dlg.setModal(False)
+        layout = QVBoxLayout(dlg)
+
+        msg = QLabel(self._(
+            "Host {host} does not respond to ICMP, but responds on TCP {port}.\n\n"
+            "Switch this host to a TCP check?"
+        ).format(host=host, port=port))
+        msg.setWordWrap(True)
+        layout.addWidget(msg)
+
+        buttons = QDialogButtonBox()
+        switch_btn = buttons.addButton(
+            self._("Switch to TCP {}").format(port),
+            QDialogButtonBox.ButtonRole.AcceptRole)
+        keep_btn = buttons.addButton(
+            self._("Keep ICMP"),
+            QDialogButtonBox.ButtonRole.RejectRole)
+        never_btn = buttons.addButton(
+            self._("Never ask again"),
+            QDialogButtonBox.ButtonRole.DestructiveRole)
+        layout.addWidget(buttons)
+
+        def _finish(action):
+            if action == 'switch':
+                self._apply_auto_detect_switch(host, port)
+            elif action == 'never':
+                self.auto_detect_mode = "off"
+                self.settings.setValue("auto_detect_mode", "off")
+            dlg.accept()
+            QTimer.singleShot(0, self._show_next_auto_detect_dialog)
+
+        switch_btn.clicked.connect(lambda: _finish('switch'))
+        keep_btn.clicked.connect(lambda: _finish('keep'))
+        never_btn.clicked.connect(lambda: _finish('never'))
+        # Esc and x = "Keep ICMP"
+        buttons.rejected.connect(lambda: _finish('keep'))
+
+        dlg.show()
+
+    def _apply_auto_detect_switch(self, host, port):
+        if host not in self.host_widgets:
+            return
+        w = self.host_widgets[host]
+        self.host_check_types[host] = {'type': 'tcp', 'port': port}
+        w.set_check_type('tcp', port)
+        w.consecutive_failures = 0
+        w.was_down = False
+        w.last_notified = None
+        self.update_host_item_text(host)
+        self.update_host_list_display()
+        self.update_host_queue()
+        self.save_data()
+        self.apply_filter()
+        log.info("auto-detect %s: ICMP -> TCP:%d", host, port)
+
+
     # ---------- Add / edit ----------
 
     def add_host(self):
-        host = self.host_input.text().strip()
-        if host and host not in self.host_widgets:
-            w = self._make_host_widget(host, "Default")
-            self.host_widgets[host] = w
-            self._load_single_host_history(host, w)
-            self.update_host_list_display()
-            self.reorder_graphs()
+        raw = self.host_input.text().strip()
+        if not raw:
+            return
+        try:
+            host, port = parse_host_spec(raw)
+        except ValueError as e:
+            QMessageBox.warning(self, self._("Invalid host"),
+                                self._("Cannot parse '{}': {}").format(raw, e))
+            return
+
+        if host in self.host_widgets:
             self.host_input.clear()
-            self.save_data()
-            self.apply_filter()
-            if not self.ping_timer.isActive():
-                self.start_pinging()
-            else:
-                self.update_host_queue()
+            return
+
+        w = self._make_host_widget(host, "Default", added_this_session=True)
+        self.host_widgets[host] = w
+        self.host_check_types.setdefault(
+            host, {'type': 'icmp', 'port': None})
+        self._load_single_host_history(host, w)
+        if port is not None:
+            self.host_check_types[host] = {'type': 'tcp', 'port': port}
+            w.set_check_type('tcp', port)
+        else:
+            info = self.host_check_types[host]
+            w.set_check_type(info.get('type', 'icmp'), info.get('port'))
+        self.update_host_list_display()
+        self.reorder_graphs()
+        self.host_input.clear()
+        self.save_data()
+        self.apply_filter()
+        if not self.ping_timer.isActive():
+            self.start_pinging()
+        else:
+            self.update_host_queue()
+
 
     def update_interval(self, interval):
         self.interval_label.setText(self._("Interval: {}ms").format(interval))
@@ -2557,7 +2788,7 @@ class PingMonitor(QMainWindow):
                                 os.remove(dst)
                             shutil.move(src, dst)
                         except OSError as e:
-                            print(f"[rename] meta move: {e}")
+                            log.warning("rename meta move: %s", e)
                     elif fname.endswith('.jsonl'):
                         if os.path.exists(dst):
                             try:
@@ -2565,17 +2796,17 @@ class PingMonitor(QMainWindow):
                                     df.write(sf.read())
                                 os.remove(src)
                             except OSError as e:
-                                print(f"[rename] merge {fname}: {e}")
+                                log.warning("rename merge %s: %s", fname, e)
                         else:
                             try:
                                 shutil.move(src, dst)
                             except OSError as e:
-                                print(f"[rename] move {fname}: {e}")
+                                log.warning("rename move %s: %s", fname, e)
                     else:
                         try:
                             shutil.move(src, dst)
                         except OSError as e:
-                            print(f"[rename] move {fname}: {e}")
+                            log.warning("rename move %s: %s", fname, e)
 
                 try:
                     if os.path.isdir(old_dir) and not os.listdir(old_dir):
@@ -2590,7 +2821,7 @@ class PingMonitor(QMainWindow):
                         new_host, {'type': 'icmp', 'port': None}),
                 }, mf, indent=2)
         except Exception as e:
-            print(f"[rename] Failed to rename history {old_dir} -> {new_dir}: {e}")
+            log.error("rename failed %s -> %s: %s", old_dir, new_dir, e)
 
     def edit_host(self, host):
         if not host:
@@ -2681,6 +2912,7 @@ class PingMonitor(QMainWindow):
         self.settings.setValue("appearance", self.appearance)
         self.settings.setValue("graph_show_latency", self.graph_show_latency)
         self.settings.setValue("graph_height_mode", self.graph_height_mode)
+        self.settings.setValue("auto_detect_mode", self.auto_detect_mode)
 
         if self._save_in_progress:
             return
@@ -2721,7 +2953,7 @@ class PingMonitor(QMainWindow):
                             f.write(json.dumps([t.isoformat(), s, lat]) + "\n")
                 w.last_saved_time = max(t for t, _, _ in new)
             except Exception as e:
-                print(f"[save-sync] {host}: {e}")
+                log.error("save-sync %s: %s", host, e)
 
     @pyqtSlot(dict)
     def _on_save_finished(self, result, worker=None):
@@ -2747,7 +2979,7 @@ class PingMonitor(QMainWindow):
                     meta = json.load(f)
                 check_info = meta.get('check_type', check_info)
             except Exception as e:
-                print(f"Error reading meta for {host}: {e}")
+                log.warning("meta read for %s: %s", host, e)
         self.host_check_types[host] = check_info
         widget.set_check_type(check_info['type'], check_info.get('port'))
 
@@ -2769,6 +3001,10 @@ class PingMonitor(QMainWindow):
             else:
                 break
         widget.consecutive_failures = failures
+
+        if check_info.get('type', 'icmp') == 'icmp':
+            if any(s for _, s, _ in records):
+                self._had_icmp_success.add(host)
 
         widget.graph_widget.update_history(
             widget.ping_history, widget.session_success_count,
@@ -2795,10 +3031,20 @@ class PingMonitor(QMainWindow):
                 w.set_muted(muted)
                 self.host_widgets[host] = w
 
+        total_records = 0
+        hosts_with_history = 0
         for host, w in self.host_widgets.items():
             loaded = self._load_single_host_history(host, w)
             if loaded:
-                print(f"[load] Loaded {loaded} records for {host}")
+                total_records += loaded
+                hosts_with_history += 1
+                log.info("load %d records for %s", loaded, host)
+
+        if self.host_widgets:
+            log.info("startup: %d host(s), %d with history, %d record(s) total",
+                     len(self.host_widgets), hosts_with_history, total_records)
+        else:
+            log.info("startup: no hosts configured")
 
         self.update_host_list_display()
         self.reorder_graphs()
@@ -2817,6 +3063,8 @@ class PingMonitor(QMainWindow):
 
 def main_entry():
     """Entry point for console_scripts (used by Snap, pip install)."""
+    setup_logging()
+    log.info("QPing started: %s", " ".join(sys.argv))
     app = QApplication(sys.argv)
     window = PingMonitor()
     window.show()

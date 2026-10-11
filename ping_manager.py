@@ -6,8 +6,10 @@ import time as _time
 import shutil
 from PyQt6.QtCore import QObject, pyqtSignal, QRunnable, pyqtSlot, QMetaObject, Q_ARG, Qt
 
-_FPING_PATH = shutil.which("fping")
+import logging
+log = logging.getLogger(__name__)
 
+_FPING_PATH = shutil.which("fping")
 
 def has_fping():
     return _FPING_PATH is not None
@@ -24,7 +26,7 @@ class PingManager(QObject):
         self.thread_pool = thread_pool
 
     def _effective_timeout_ms(self):
-        """Возвращает фактический таймаут в мс.
+        """Return real timeout in ms.
         0 -> авто: max(1000, interval)"""
         if self.timeout_ms > 0:
             return max(100, self.timeout_ms)
@@ -155,7 +157,7 @@ class FpingBatchWorker(QRunnable):
             self._parse_lines(result.stdout or "", results)
             self._parse_lines(result.stderr or "", results)
         except Exception as e:
-            print(f"[fping batch] {e}")
+            log.warning("fping batch: %s", e)
 
         for host, (success, latency) in results.items():
             QMetaObject.invokeMethod(
@@ -191,3 +193,43 @@ class FpingBatchWorker(QRunnable):
                 results[m.group(1)] = (False, -1.0)
                 continue
 
+class TcpProbeWorker(QRunnable):
+    """Probe a host on a list of TCP ports sequentially.
+
+    Emits `finished(host, {port: (success, latency_ms)})`.
+    Used by the auto-detect logic: when a host never answers ICMP,
+    we try a few common TCP ports to see whether TCP works.
+    """
+
+    class _Signals(QObject):
+        finished = pyqtSignal(str, dict)   # host, {port: (success, latency)}
+
+    def __init__(self, host, ports, timeout_sec):
+        super().__init__()
+        self.host = host
+        self.ports = list(ports)
+        self.timeout_sec = float(timeout_sec)
+        self.signals = TcpProbeWorker._Signals()
+
+    @pyqtSlot()
+    def run(self):
+        results = {}
+        for port in self.ports:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(self.timeout_sec)
+            start = _time.perf_counter()
+            try:
+                rc = sock.connect_ex((self.host, port))
+                elapsed_ms = (_time.perf_counter() - start) * 1000.0
+                results[port] = (rc == 0, elapsed_ms if rc == 0 else -1.0)
+            except Exception:
+                results[port] = (False, -1.0)
+            finally:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+        try:
+            self.signals.finished.emit(self.host, results)
+        except RuntimeError:
+            pass

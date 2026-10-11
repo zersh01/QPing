@@ -6,6 +6,7 @@ Require PyQt6 and, for HostWidget.graph_widget, helpers from utils.
 """
 import bisect
 import builtins
+import time as _time
 from datetime import datetime, timedelta
 from PyQt6.QtWidgets import QWidget, QLabel, QVBoxLayout, QSizePolicy
 from PyQt6.QtCore import Qt, QRect, QPoint, pyqtSignal
@@ -354,6 +355,20 @@ class PingGraphWidget(QWidget):
         self.height_mode = "normal"            # 'compact' | 'normal' | 'expanded'
         self._apply_height()
 
+        # --- Lazy stats cache ---
+        # Version counter: bumped on every update_history() call.
+        self._history_version = 0
+        self._stats_cache = None
+        self._stats_cache_version = -1
+        # Recent stats depend on wall-clock time (sliding window), so they
+        # need a TTL even when the history has not changed.
+        self._recent_cache = None
+        self._recent_cache_version = -1
+        self._recent_cache_monotonic = 0.0
+        self._recent_ttl_sec = 10.0
+        # --- Reusable paint resources ---
+        self._grid_font = QFont("Arial", 7)
+
     def set_show_latency(self, on):
         self.show_latency = bool(on)
         self._apply_height()
@@ -388,16 +403,53 @@ class PingGraphWidget(QWidget):
         self.session_failure_count = session_failure_count
         self.app_start_time = app_start_time
         self._times_cache = [t for t, _, _ in history]
-        self._update_tooltip()
+        self._history_version += 1
+        # Tooltip is NOT rebuilt here. It is built lazily on cursor entry
+        # (enterEvent) and refreshed while the cursor moves over the widget
+        # (mouseMoveEvent). Building it on every ping tick was wasted work
+        # for widgets the user is not looking at.
         self.repaint()
+
+    def enterEvent(self, event):
+        # Cursor entered the widget — build the tooltip from the current
+        # (possibly cached) data. This is the only place where a tooltip is
+        # created outside of mouseMoveEvent.
+        self._update_tooltip()
+        super().enterEvent(event)
+
+    def _get_stats(self):
+        """All-time latency stats, cached by history version.
+        Recomputed only when the history actually changes."""
+        if self._stats_cache_version != self._history_version:
+            self._stats_cache = compute_latency_stats(self.history)
+            self._stats_cache_version = self._history_version
+        return self._stats_cache
+
+    def _get_recent_stats(self):
+        """Recent (sliding window) stats.
+
+        Depends on both the history version AND wall-clock time, because the
+        window is 'last N minutes'. So we invalidate on either:
+          - history version changed (new records arrived), or
+          - TTL expired (window slid forward even without new records).
+        """
+        now_mono = _time.monotonic()
+        version_changed = self._recent_cache_version != self._history_version
+        ttl_expired = (now_mono - self._recent_cache_monotonic) >= self._recent_ttl_sec
+        if version_changed or ttl_expired:
+            self._recent_cache = compute_recent_stats(
+                self.history, minutes=self.recent_window_minutes)
+            self._recent_cache_version = self._history_version
+            self._recent_cache_monotonic = now_mono
+        return self._recent_cache
 
     def _update_tooltip(self):
         if self.app_start_time is None:
             return
         total_checks = self.session_success_count + self.session_failure_count
         failure_rate = (self.session_failure_count / total_checks * 100) if total_checks > 0 else 0
-        stats = compute_latency_stats(self.history)
-        recent = compute_recent_stats(self.history, minutes=self.recent_window_minutes)
+        stats = self._get_stats()
+        recent = self._get_recent_stats()
 
         header = []
         if self._hover_pos is not None:
@@ -534,11 +586,18 @@ class PingGraphWidget(QWidget):
             # --- Graph background (so empty regions are visibly distinct from bars) ---
             painter.fillRect(plot_x, plot_y, plot_w, plot_h, p.graph_bg)
 
-            # --- Indices of visible records ---
-            visible_idx = [i for i, rec in enumerate(self.history)
-                           if visible_start <= rec[0] <= visible_end]
-            if not visible_idx:
+            # --- Indices of visible records (binary search) ---
+            # self._times_cache is sorted by construction (update_history
+            # rebuilds it from the history list, which is kept sorted).
+            # Linear scan here was O(N) on every repaint; bisect makes it
+            # O(log N), and visible_idx becomes a view (range) instead of
+            # a materialized list.
+            times = self._times_cache
+            lo = bisect.bisect_left(times, visible_start)
+            hi = bisect.bisect_right(times, visible_end)
+            if lo >= hi:
                 return
+            visible_idx = range(lo, hi)
 
             # --- Gap threshold ---
             # Estimate the per-host cadence from the MOST RECENT records,
@@ -579,7 +638,7 @@ class PingGraphWidget(QWidget):
                 ymax = _pick_ymax(lats)
                 self._current_ymax = ymax
 
-                painter.setFont(QFont("Arial", 7))
+                painter.setFont(self._grid_font)
                 for val in _grid_values(ymax, density=self.height_mode):
                     y = bottom_y - int(val / ymax * plot_h)
                     painter.setPen(QPen(p.graph_grid, 1, Qt.PenStyle.DotLine))
@@ -713,6 +772,11 @@ class HostWidget(QWidget):
         self.muted = False
         self._last_prune = None
         self._prune_interval_sec = 300
+        self._last_status = "unknown"   # "ok" | "warn" | "down" | "unknown"
+
+        # Auto-detect bookkeeping
+        self.added_at = datetime.now()
+        self.added_this_session = False
 
         layout = QVBoxLayout()
         self.setLayout(layout)

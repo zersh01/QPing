@@ -4,6 +4,7 @@ ping_widgets.py                    usr/lib/python3/dist-packages/qping/
 utils.py                           usr/lib/python3/dist-packages/qping/
 theme.py                           usr/lib/python3/dist-packages/qping/
 help.py                            usr/lib/python3/dist-packages/qping/
+qp_logging.py                      usr/lib/python3/dist-packages/qping/
 translations/                      usr/lib/python3/dist-packages/qping/
 qping.svg                          usr/share/icons/hicolor/scalable/apps/
 debian/qping.desktop               usr/share/applications/
