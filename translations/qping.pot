@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2026-09-29 11:43+0300\n"
+"POT-Creation-Date: 2026-10-14 21:49+0300\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -93,6 +93,24 @@ msgstr ""
 
 #: help.py:77
 msgid ""
+"<h3>Host addition</h3><ul><li><b>Port in the input field.</b> If a port is "
+"specified in the input field (e.g. <code>example.com:443</code> or "
+"<code>example.com 443</code>), the host is immediately created with a TCP "
+"check type on the specified port. An explicit port takes precedence over "
+"<code>check_type</code> from <code>meta.json</code>.</li><li><b>Automatic "
+"check type detection (ICMP → TCP).</b> Configurable under <b>Settings → "
+"General</b> with three modes:<ul><li><b>Off</b> (default)</li><li><b>Only "
+"for hosts added this session</b></li><li><b>Always</b></li></ul>Logic: if an "
+"ICMP host has zero successful responses and has accumulated <b>5 consecutive "
+"failures</b> (and the host was added at least <b>10 seconds</b> ago), TCP "
+"ports <b>443, 80, and 22</b> are tested sequentially in the background. If "
+"at least one responds consistently, a dialog box prompts the user to switch "
+"the host to TCP. The type changes only after user confirmation; a <b>Never "
+"ask again</b> button is provided.</li></ul>"
+msgstr ""
+
+#: help.py:100
+msgid ""
 "<h3>Alerts and notifications</h3><p>Threshold, reminder interval and "
 "recovery notifications are configured in Application → Settings → Alerts.</"
 "p><p>Tray notifications are grouped within a 2-second window: if several "
@@ -102,14 +120,14 @@ msgid ""
 "that at least one host is in the warning state.</p>"
 msgstr ""
 
-#: help.py:86
+#: help.py:109
 msgid ""
 "<h3>Appearance</h3><p>In Settings → General you can choose <b>Auto</b> "
 "(follow the system theme), <b>Light</b> or <b>Dark</b>. In Auto mode the "
 "theme is switched automatically when the system color scheme changes.</p>"
 msgstr ""
 
-#: help.py:91
+#: help.py:114
 msgid ""
 "<h3>Language</h3><p>The Language menu is built automatically from the "
 "compiled translations available under <code>translations/&lt;code&gt;/"
@@ -118,7 +136,7 @@ msgid ""
 "p>"
 msgstr ""
 
-#: help.py:97
+#: help.py:120
 msgid ""
 "<h3>Storage</h3><p>History: <code>~/.config/QPing/history/&lt;host&gt;/YYYY-"
 "MM-DD.jsonl</code>.<br>Only the last hour is loaded on startup; older days "
@@ -126,7 +144,7 @@ msgid ""
 "cleanup is configured in Application → Settings → Storage.</p>"
 msgstr ""
 
-#: help.py:103
+#: help.py:126
 msgid ""
 "<h3>Hooks</h3><p>External scripts triggered on host down/up transitions. See "
 "Settings → Hooks. Environment variables passed to the scripts: "
@@ -134,14 +152,14 @@ msgid ""
 "<code>QPING_FAILURES</code>, <code>QPING_TIMESTAMP</code>.</p>"
 msgstr ""
 
-#: help.py:109
+#: help.py:132
 msgid ""
 "<h3>Ansible inventory import</h3><p>Import → select <code>.ini</code> or "
 "<code>.yml</code>/<code>.yaml</code>. Groups become categories; "
 "<code>ansible_host</code> overrides the inventory hostname.</p>"
 msgstr ""
 
-#: help.py:113
+#: help.py:136
 msgid ""
 "<h3>Backup and restore</h3><p>Application → Export Hosts saves the full list "
 "(hosts, categories, check types, disabled and muted flags) into a <code>."
@@ -149,322 +167,338 @@ msgid ""
 "the list.</p>"
 msgstr ""
 
-#: main.py:244
+#: main.py:252
 msgid "QPing Monitor"
 msgstr ""
 
-#: main.py:783 main.py:1615
+#: main.py:816 main.py:1662
 msgid "Application"
 msgstr ""
 
-#: main.py:785 main.py:1616
+#: main.py:818 main.py:1663
 msgid "Settings..."
 msgstr ""
 
-#: main.py:789 main.py:1617
+#: main.py:822 main.py:1664
 msgid "Export Hosts..."
 msgstr ""
 
-#: main.py:793 main.py:1618
+#: main.py:826 main.py:1665
 msgid "Import Hosts..."
 msgstr ""
 
-#: main.py:799 main.py:1619
+#: main.py:832 main.py:1666
 msgid "Close"
 msgstr ""
 
-#: main.py:806 main.py:843 main.py:1620 main.py:1636
+#: main.py:839 main.py:876 main.py:1667 main.py:1683
 msgid "Quit"
 msgstr ""
 
-#: main.py:812 main.py:1622
+#: main.py:845 main.py:1669
 msgid "Help"
 msgstr ""
 
-#: main.py:813 main.py:1465 main.py:1623
+#: main.py:846 main.py:1512 main.py:1670
 msgid "User Guide"
 msgstr ""
 
-#: main.py:817 main.py:1624
+#: main.py:850 main.py:1671
 msgid "About"
 msgstr ""
 
-#: main.py:825 main.py:1626
+#: main.py:858 main.py:1673
 msgid "Language"
 msgstr ""
 
-#: main.py:840 main.py:1635 main.py:2190
+#: main.py:873 main.py:1682 main.py:2255
 msgid "Restore"
 msgstr ""
 
-#: main.py:852 main.py:1600
+#: main.py:885 main.py:1647
 msgid "Enter IP/domain"
 msgstr ""
 
-#: main.py:854 main.py:1602
+#: main.py:887 main.py:1649
 msgid "Add Host"
 msgstr ""
 
-#: main.py:856 main.py:1603 main.py:1735
+#: main.py:889 main.py:1650 main.py:1782
 msgid "Import from File"
 msgstr ""
 
-#: main.py:862 main.py:1604 main.py:2534
+#: main.py:895 main.py:1651 main.py:2765
 msgid "Interval: {}ms"
 msgstr ""
 
-#: main.py:864 main.py:1395 main.py:1606
+#: main.py:897 main.py:1442 main.py:1653
 msgid "Notifications: On"
 msgstr ""
 
-#: main.py:865 main.py:1396 main.py:1607
+#: main.py:898 main.py:1443 main.py:1654
 msgid "Notifications: Off"
 msgstr ""
 
-#: main.py:869
+#: main.py:902
 msgid "Cycle filter: All → Failed → Warn"
 msgstr ""
 
-#: main.py:872 main.py:1611
+#: main.py:905 main.py:1658
 msgid "Interval:"
 msgstr ""
 
-#: main.py:891
+#: main.py:924
 msgid "Click to show only warning hosts"
 msgstr ""
 
-#: main.py:894
+#: main.py:927
 msgid "Click to show only down hosts"
 msgstr ""
 
-#: main.py:897
+#: main.py:930
 msgid "Click to show disabled and muted hosts"
 msgstr ""
 
-#: main.py:918 main.py:1613
+#: main.py:951 main.py:1660
 msgid "Monitored Hosts:"
 msgstr ""
 
-#: main.py:926 main.py:1601
+#: main.py:959 main.py:1648
 msgid "Search host..."
 msgstr ""
 
-#: main.py:932
+#: main.py:965
 msgid "Expand all groups"
 msgstr ""
 
-#: main.py:938
+#: main.py:971
 msgid "Collapse all groups"
 msgstr ""
 
-#: main.py:1086
+#: main.py:1119
 msgid "Settings"
 msgstr ""
 
-#: main.py:1096
+#: main.py:1129
 msgid "Auto (follow system)"
 msgstr ""
 
-#: main.py:1097
+#: main.py:1130
 msgid "Light"
 msgstr ""
 
-#: main.py:1098
+#: main.py:1131
 msgid "Dark"
 msgstr ""
 
-#: main.py:1102
+#: main.py:1135
 msgid "Appearance:"
 msgstr ""
 
-#: main.py:1109
+#: main.py:1142
 msgid "hours"
 msgstr ""
 
-#: main.py:1109
+#: main.py:1142
 msgid "days"
 msgstr ""
 
-#: main.py:1113
+#: main.py:1146
 msgid "Keep history for:"
 msgstr ""
 
-#: main.py:1115
+#: main.py:1148
 msgid "Minimize to tray on Escape"
 msgstr ""
 
-#: main.py:1124
+#: main.py:1157
 msgid "Auto (follows interval)"
 msgstr ""
 
-#: main.py:1125
+#: main.py:1158
 msgid "Response timeout:"
 msgstr ""
 
-#: main.py:1131
+#: main.py:1164
 msgid "fping batch size (hosts per call):"
 msgstr ""
 
-#: main.py:1133
+#: main.py:1166
 msgid "fping not found — batch size has no effect."
 msgstr ""
 
-#: main.py:1137
+#: main.py:1170
 msgid "Show latency scale on graphs"
 msgstr ""
 
-#: main.py:1142
+#: main.py:1175
 msgid "Compact (50px)"
 msgstr ""
 
-#: main.py:1143
+#: main.py:1176
 msgid "Normal (80px)"
 msgstr ""
 
-#: main.py:1144
+#: main.py:1177
 msgid "Expanded (200px)"
 msgstr ""
 
-#: main.py:1148
+#: main.py:1181
 msgid "Graph height:"
 msgstr ""
 
-#: main.py:1150
+#: main.py:1184
+msgid "Off"
+msgstr ""
+
+#: main.py:1185
+msgid "Only for hosts added this session"
+msgstr ""
+
+#: main.py:1186
+msgid "Always"
+msgstr ""
+
+#: main.py:1190
+msgid "Auto-detect check type:"
+msgstr ""
+
+#: main.py:1192
 msgid "General"
 msgstr ""
 
-#: main.py:1156
+#: main.py:1198
 msgid "Alert after N consecutive failures:"
 msgstr ""
 
-#: main.py:1160
+#: main.py:1202
 msgid "Remind every:"
 msgstr ""
 
-#: main.py:1161
+#: main.py:1203
 msgid "Notify when host recovers"
 msgstr ""
 
-#: main.py:1164
+#: main.py:1206
 msgid "Alerts"
 msgstr ""
 
-#: main.py:1168
+#: main.py:1210
 msgid "Auto-cleanup old history files"
 msgstr ""
 
-#: main.py:1174
+#: main.py:1216
 msgid "Delete archives older than:"
 msgstr ""
 
-#: main.py:1175
+#: main.py:1217
 msgid "Files are deleted from ~/.config/QPing/history/. This cannot be undone."
 msgstr ""
 
-#: main.py:1179
+#: main.py:1221
 msgid "Storage"
 msgstr ""
 
-#: main.py:1183
+#: main.py:1225
 msgid "Enable event hooks"
 msgstr ""
 
-#: main.py:1189
+#: main.py:1231
 msgid "Choose directory..."
 msgstr ""
 
-#: main.py:1191
+#: main.py:1233
 msgid "Hooks directory"
 msgstr ""
 
-#: main.py:1195
+#: main.py:1237
 msgid "Hooks directory:"
 msgstr ""
 
-#: main.py:1198
+#: main.py:1240
 msgid ""
 "Scripts: on_host_down.sh and on_host_up.sh (must be executable).\n"
 "Environment variables: QPING_HOST, QPING_STATUS (down/up), QPING_FAILURES, "
 "QPING_TIMESTAMP."
 msgstr ""
 
-#: main.py:1204
+#: main.py:1246
 msgid "Hooks"
 msgstr ""
 
-#: main.py:1337
+#: main.py:1384
 msgid "Host unavailable"
 msgstr ""
 
-#: main.py:1338
+#: main.py:1385
 msgid "Host {} is not responding"
 msgstr ""
 
-#: main.py:1340
+#: main.py:1387
 msgid "Hosts unavailable"
 msgstr ""
 
-#: main.py:1341
+#: main.py:1388
 msgid ""
 "{} hosts are not responding:\n"
 "{}"
 msgstr ""
 
-#: main.py:1349
+#: main.py:1396
 msgid "Host recovered"
 msgstr ""
 
-#: main.py:1350
+#: main.py:1397
 msgid "Host {} is responding again"
 msgstr ""
 
-#: main.py:1352
+#: main.py:1399
 msgid "Hosts recovered"
 msgstr ""
 
-#: main.py:1353
+#: main.py:1400
 msgid ""
 "{} hosts are responding again:\n"
 "{}"
 msgstr ""
 
-#: main.py:1413
+#: main.py:1460
 msgid "Filter: All"
 msgstr ""
 
-#: main.py:1414
+#: main.py:1461
 msgid "Filter: Failed"
 msgstr ""
 
-#: main.py:1415
+#: main.py:1462
 msgid "Filter: Warn"
 msgstr ""
 
-#: main.py:1416
+#: main.py:1463
 msgid "Filter: Disabled"
 msgstr ""
 
-#: main.py:1514
+#: main.py:1561
 msgid "About QPing"
 msgstr ""
 
-#: main.py:1535
+#: main.py:1582
 msgid "Network host monitor with ICMP ping and TCP port checks."
 msgstr ""
 
-#: main.py:1539
+#: main.py:1586
 msgid "Author: {}"
 msgstr ""
 
-#: main.py:1551
+#: main.py:1598
 msgid "License: MIT"
 msgstr ""
 
-#: main.py:1559
+#: main.py:1606
 msgid "Changelog:"
 msgstr ""
 
-#: main.py:1571
+#: main.py:1618
 msgid ""
 "Changelog is not available.\n"
 "\n"
@@ -472,119 +506,119 @@ msgid ""
 "  /usr/share/doc/qping/changelog.Debian.gz"
 msgstr ""
 
-#: main.py:1661
+#: main.py:1708
 msgid "Delete Category '{}'"
 msgstr ""
 
-#: main.py:1672
+#: main.py:1719
 msgid "Edit (F2)"
 msgstr ""
 
-#: main.py:1676
+#: main.py:1723
 msgid "Delete (Del)"
 msgstr ""
 
-#: main.py:1679
+#: main.py:1726
 msgid "Ping now"
 msgstr ""
 
-#: main.py:1683
+#: main.py:1730
 msgid "Enable monitoring"
 msgstr ""
 
-#: main.py:1683
+#: main.py:1730
 msgid "Disable monitoring"
 msgstr ""
 
-#: main.py:1691
+#: main.py:1738
 msgid "Mute notifications"
 msgstr ""
 
-#: main.py:1691
+#: main.py:1738
 msgid "Unmute notifications"
 msgstr ""
 
-#: main.py:1695
+#: main.py:1742
 msgid "Check Type"
 msgstr ""
 
-#: main.py:1696
+#: main.py:1743
 msgid "ICMP Ping"
 msgstr ""
 
-#: main.py:1697 main.py:1858
+#: main.py:1744 main.py:1905
 msgid "TCP Port"
 msgstr ""
 
-#: main.py:1703
+#: main.py:1750
 msgid "Graph height"
 msgstr ""
 
-#: main.py:1704
+#: main.py:1751
 msgid "Compact"
 msgstr ""
 
-#: main.py:1705
+#: main.py:1752
 msgid "Normal"
 msgstr ""
 
-#: main.py:1706
+#: main.py:1753
 msgid "Expanded"
 msgstr ""
 
-#: main.py:1713 main.py:1816
+#: main.py:1760 main.py:1863
 msgid "Set Category"
 msgstr ""
 
-#: main.py:1716 main.py:1920
+#: main.py:1763 main.py:1967
 msgid "Clear History"
 msgstr ""
 
-#: main.py:1719 main.py:1971 main.py:1975
+#: main.py:1766 main.py:2018 main.py:2022
 msgid "Load Full History"
 msgstr ""
 
-#: main.py:1783 main.py:1799
+#: main.py:1830 main.py:1846
 msgid "Delete Category"
 msgstr ""
 
-#: main.py:1784
+#: main.py:1831
 msgid "Category '{}' contains {} hosts. What would you like to do?"
 msgstr ""
 
-#: main.py:1785
+#: main.py:1832
 msgid "Move hosts to Default"
 msgstr ""
 
-#: main.py:1786
+#: main.py:1833
 msgid "Delete all hosts"
 msgstr ""
 
-#: main.py:1800
+#: main.py:1847
 msgid "Delete empty category '{}'?"
 msgstr ""
 
-#: main.py:1821 main.py:1832 main.py:1834
+#: main.py:1868 main.py:1879 main.py:1881
 msgid "New Category"
 msgstr ""
 
-#: main.py:1824
+#: main.py:1871
 msgid "Enter new category name"
 msgstr ""
 
-#: main.py:1859
+#: main.py:1906
 msgid "Enter port number (1-65535):"
 msgstr ""
 
-#: main.py:1898
+#: main.py:1945
 msgid "Delete"
 msgstr ""
 
-#: main.py:1899
+#: main.py:1946
 msgid "Delete {} hosts?"
 msgstr ""
 
-#: main.py:1921
+#: main.py:1968
 msgid ""
 "Delete all history for {} host(s)?\n"
 "\n"
@@ -592,114 +626,150 @@ msgid ""
 "history/ for the selected host(s)."
 msgstr ""
 
-#: main.py:1972
+#: main.py:2019
 msgid "Loading history for {} host(s) in background."
 msgstr ""
 
-#: main.py:1976
+#: main.py:2023
 msgid "No additional history to load."
 msgstr ""
 
-#: main.py:2119
+#: main.py:2165
 msgid "Import hosts"
 msgstr ""
 
-#: main.py:2120
+#: main.py:2166
 msgid ""
 "Supported (*.ini *.yml *.yaml *.txt *.qping.json hosts);;Ansible INI (*."
 "ini);;Ansible YAML (*.yml *.yaml);;Hosts file (hosts);;Text list (*.txt);;"
 "QPing backup (*.qping.json);;All files (*)"
 msgstr ""
 
-#: main.py:2130
+#: main.py:2176
 msgid "Import error"
 msgstr ""
 
-#: main.py:2145 main.py:2154 main.py:2185
+#: main.py:2191 main.py:2200 main.py:2249
 msgid "Import"
 msgstr ""
 
-#: main.py:2146
+#: main.py:2192
 msgid "YAML parsing requires PyYAML. Install with: pip install pyyaml"
 msgstr ""
 
-#: main.py:2154
+#: main.py:2200
 msgid "No hosts found."
 msgstr ""
 
-#: main.py:2182
-msgid "Import completed"
-msgstr ""
-
-#: main.py:2183
+#: main.py:2244
 msgid "Successfully added {} hosts."
 msgstr ""
 
-#: main.py:2185
+#: main.py:2246
+msgid "Skipped {} invalid entries."
+msgstr ""
+
+#: main.py:2247
+msgid "Import completed"
+msgstr ""
+
+#: main.py:2249
 msgid "No new hosts added."
 msgstr ""
 
-#: main.py:2191
+#: main.py:2256
 msgid "Invalid QPing backup file."
 msgstr ""
 
-#: main.py:2195
+#: main.py:2260
 msgid "Restore from backup"
 msgstr ""
 
-#: main.py:2196
+#: main.py:2261
 msgid ""
 "Backup contains {} host(s).\n"
 "\n"
 "What would you like to do?"
 msgstr ""
 
-#: main.py:2198
+#: main.py:2263
 msgid "Replace current list"
 msgstr ""
 
-#: main.py:2200
+#: main.py:2265
 msgid "Merge with current"
 msgstr ""
 
-#: main.py:2244
+#: main.py:2309
 msgid "Restore completed"
 msgstr ""
 
-#: main.py:2245
+#: main.py:2310
 msgid "Restored {} hosts."
 msgstr ""
 
-#: main.py:2249
+#: main.py:2314
 msgid "Export hosts"
 msgstr ""
 
-#: main.py:2251
+#: main.py:2316
 msgid "QPing backup (*.qping.json);;JSON (*.json);;All files (*)"
 msgstr ""
 
-#: main.py:2283
+#: main.py:2348
 msgid "Export error"
 msgstr ""
 
-#: main.py:2286
+#: main.py:2351
 msgid "Export completed"
 msgstr ""
 
-#: main.py:2287
+#: main.py:2352
 msgid ""
 "Exported {} hosts to:\n"
 "{}"
 msgstr ""
 
-#: main.py:2598 main.py:2604
+#: main.py:2668
+msgid "Auto-detect check type"
+msgstr ""
+
+#: main.py:2673
+#, python-brace-format
+msgid ""
+"Host {host} does not respond to ICMP, but responds on TCP {port}.\n"
+"\n"
+"Switch this host to a TCP check?"
+msgstr ""
+
+#: main.py:2681
+msgid "Switch to TCP {}"
+msgstr ""
+
+#: main.py:2684
+msgid "Keep ICMP"
+msgstr ""
+
+#: main.py:2687
+msgid "Never ask again"
+msgstr ""
+
+#: main.py:2734
+msgid "Invalid host"
+msgstr ""
+
+#: main.py:2735
+msgid "Cannot parse '{}': {}"
+msgstr ""
+
+#: main.py:2829 main.py:2835
 msgid "Edit"
 msgstr ""
 
-#: main.py:2599
+#: main.py:2830
 msgid "New host name:"
 msgstr ""
 
-#: main.py:2605
+#: main.py:2836
 msgid "Host '{}' already exists."
 msgstr ""
