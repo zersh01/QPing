@@ -1,4 +1,5 @@
 __pycache__/
+debian/
 *.py[cod]
 dist/
 build/
